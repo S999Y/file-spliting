@@ -1,7 +1,8 @@
 {
-  "name": "react-example",
+  "name": "fileshard",
   "private": true,
-  "version": "0.0.0",
+  "version": "3.0.0",
+  "description": "WinRAR-compatible file splitting, compression, encryption, and reassembly toolkit — entirely client-side.",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",

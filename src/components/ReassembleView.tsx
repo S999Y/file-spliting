@@ -11,7 +11,11 @@ import {
   RefreshCw,
   Sparkles,
   Cloud,
-  FileText
+  FileText,
+  Lock,
+  LockOpen,
+  FolderOpen,
+  Save
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { FileManifest } from '../types';
@@ -19,6 +23,7 @@ import { formatBytes } from '../utils/crypto';
 import { reassembleFileFromParts, PartInput, ReassemblyResult } from '../utils/reassembler';
 import { getStoredBackups } from '../utils/cloudStorage';
 import { soundManager } from '../utils/sound';
+import { promptSaveLocation, writeBlobToStream, fallbackDownloadBlob, promptSaveDirectory, writeBlobsToDirectory } from '../utils/saveHelper';
 
 interface ReassembleViewProps {
   onLog: (level: 'INFO' | 'SYS' | 'AUTH' | 'CHK' | 'WARN' | 'ERROR' | 'SUCCESS', msg: string) => void;
@@ -37,6 +42,10 @@ export const ReassembleView: React.FC<ReassembleViewProps> = ({
   const [progress, setProgress] = useState<number>(0);
   const [result, setResult] = useState<ReassemblyResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [password, setPassword] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [extractMode, setExtractMode] = useState<'extractHere' | 'extractToFolder'>('extractHere');
+  const [savedDirHandle, setSavedDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
 
   const partsInputRef = useRef<HTMLInputElement>(null);
   const manifestInputRef = useRef<HTMLInputElement>(null);
@@ -63,6 +72,7 @@ export const ReassembleView: React.FC<ReassembleViewProps> = ({
       onLog('INFO', `Loaded ${newFiles.length} file shard(s) into reassembly workspace.`);
       setResult(null);
       setErrorMsg(null);
+      setSavedDirHandle(null);
     }
   };
 
@@ -98,6 +108,7 @@ export const ReassembleView: React.FC<ReassembleViewProps> = ({
         totalParts: backup.totalParts,
         partSize: Math.ceil(backup.totalSize / backup.totalParts),
         compressed: false,
+        encrypted: false,
         createdAt: backup.uploadedAt,
         parts: backup.parts.map(p => ({
           index: p.index,
@@ -124,7 +135,8 @@ export const ReassembleView: React.FC<ReassembleViewProps> = ({
         uploadedParts,
         manifest || undefined,
         (p, cur, tot) => setProgress(p),
-        (level, msg) => onLog(level, msg)
+        (level, msg) => onLog(level, msg),
+        password || undefined
       );
 
       setResult(res);
@@ -147,15 +159,35 @@ export const ReassembleView: React.FC<ReassembleViewProps> = ({
     }
   };
 
-  const handleDownloadReassembledFile = () => {
+  const getOrPromptDirectory = async (): Promise<FileSystemDirectoryHandle | null> => {
+    if (savedDirHandle) return savedDirHandle;
+    const dirHandle = await promptSaveDirectory();
+    if (dirHandle) setSavedDirHandle(dirHandle);
+    return dirHandle;
+  };
+
+  const handleDownloadReassembledFile = async () => {
     if (!result) return;
-    const url = URL.createObjectURL(result.file);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = result.fileName;
-    a.click();
-    URL.revokeObjectURL(url);
-    onLog('SUCCESS', `Downloaded reconstituted file: ${result.fileName}`);
+    if (extractMode === 'extractToFolder') {
+      const dirHandle = await getOrPromptDirectory();
+      if (dirHandle) {
+        await writeBlobsToDirectory(dirHandle, [{ blob: result.file, name: result.fileName }], false);
+        onLog('SUCCESS', `Saved reassembled file to directory: ${result.fileName}`);
+        return;
+      }
+    }
+    // Fallback: single file save or browser download
+    const stream = await promptSaveLocation({
+      suggestedName: result.fileName,
+      mimeType: result.fileType || 'application/octet-stream'
+    });
+    if (stream) {
+      await writeBlobToStream(stream, result.file, result.fileName, false);
+      onLog('SUCCESS', `Saved reassembled file to chosen location: ${result.fileName}`);
+    } else {
+      fallbackDownloadBlob(result.file, result.fileName);
+      onLog('SUCCESS', `Downloaded reconstituted file: ${result.fileName}`);
+    }
   };
 
   const missingPartsCount = manifest
@@ -171,7 +203,7 @@ export const ReassembleView: React.FC<ReassembleViewProps> = ({
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <LinkIcon className="w-4 h-4 text-blue-600" />
-              <span>Upload Shard Parts (.part001, .part002...)</span>
+              <span>Upload Volume Parts (.part1.rar, .part001, .001...)</span>
             </h2>
             {uploadedParts.length > 0 && (
               <button
@@ -198,17 +230,17 @@ export const ReassembleView: React.FC<ReassembleViewProps> = ({
               <Upload className="w-5 h-5" />
             </div>
             <p className="text-xs font-bold text-slate-800">
-              Click or Drag & Drop multiple `.part*` files here
+              Click or Drag & Drop multiple `.part*` or `.001` files here
             </p>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Select all shard fragments simultaneously
+              Supports WinRAR multi-volumes, 7-Zip numerical parts, or binary shards
             </p>
           </div>
 
           {uploadedParts.length > 0 && (
             <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs font-mono">
               <span className="text-slate-600 font-bold">
-                Loaded: {uploadedParts.length} Shard File(s)
+                Loaded: {uploadedParts.length} Volume File(s)
               </span>
               <span className="text-slate-500">
                 Total: {formatBytes(uploadedParts.reduce((acc, p) => acc + p.blob.size, 0))}
@@ -276,6 +308,102 @@ export const ReassembleView: React.FC<ReassembleViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Password & Extract Options */}
+      {manifest && (
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Password Field */}
+            {manifest.encrypted && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-amber-600" />
+                  <span className="text-xs font-bold text-slate-800">Decryption Password Required</span>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  This archive is encrypted with AES-256-GCM. Enter the password used during split.
+                </p>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Enter decryption password..."
+                    className="w-full rounded-lg border border-amber-300 p-2 text-sm font-mono pr-9 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-amber-50/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPassword ? <LockOpen className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Extract Mode */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <FolderOpen className="w-4 h-4 text-blue-600" />
+                <span className="text-xs font-bold text-slate-800">Extract Mode</span>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Choose where the reassembled file will be saved.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setExtractMode('extractHere')}
+                  className={`p-2.5 rounded-lg border text-left transition ${
+                    extractMode === 'extractHere'
+                      ? 'border-blue-500 bg-blue-50/50 text-blue-900'
+                      : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
+                  }`}
+                >
+                  <p className="text-xs font-bold">Extract Here</p>
+                  <p className="text-[10px] text-slate-400">Save to current location</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExtractMode('extractToFolder')}
+                  className={`p-2.5 rounded-lg border text-left transition ${
+                    extractMode === 'extractToFolder'
+                      ? 'border-blue-500 bg-blue-50/50 text-blue-900'
+                      : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
+                  }`}
+                >
+                  <p className="text-xs font-bold">Extract to Folder</p>
+                  <p className="text-[10px] text-slate-400">Choose save location</p>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Archive Info Bar */}
+          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-[11px] font-mono text-slate-600 flex items-center gap-4">
+            {manifest.encrypted && (
+              <span className="flex items-center gap-1 text-amber-700 font-bold">
+                <Lock className="w-3 h-3" />
+                AES-256-GCM Encrypted
+              </span>
+            )}
+            {manifest.compressed && (
+              <span className="flex items-center gap-1 text-blue-700 font-bold">
+                GZIP Compressed
+              </span>
+            )}
+            <span className="text-slate-500">
+              Format: {manifest.archiveFormat?.toUpperCase() || 'RAR'} • {manifest.totalParts} Parts
+            </span>
+            {manifest.archiveComment && (
+              <span className="text-slate-500 italic">
+                Comment: "{manifest.archiveComment}"
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Missing Parts Warning */}
       {missingPartsCount > 0 && (

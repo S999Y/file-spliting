@@ -1,5 +1,5 @@
 import { FileManifest } from '../types';
-import { calculateSHA256 } from './crypto';
+import { calculateSHA256, decryptBlob } from './crypto';
 
 export interface PartInput {
   name: string;
@@ -23,22 +23,62 @@ export interface ReassemblyResult {
   totalPartsCount: number;
 }
 
+export function parsePartIndex(name: string, fallbackIdx?: number): number {
+  if (fallbackIdx !== undefined && fallbackIdx > 0) return fallbackIdx;
+  
+  // Matches: .part1.rar, .part01.rar, .part1, .part001, .part01.bin
+  const winrarMatch = name.match(/\.part(\d+)(\.rar|\.bin)?$/i);
+  if (winrarMatch) return parseInt(winrarMatch[1], 10);
+
+  // Matches: Movie.mp4.001, Movie.002
+  const numExtMatch = name.match(/\.(\d{3,4})$/);
+  if (numExtMatch) return parseInt(numExtMatch[1], 10);
+
+  // Matches: .r00, .r01 (old WinRAR convention)
+  const rMatch = name.match(/\.r(\d{2})$/i);
+  if (rMatch) return parseInt(rMatch[1], 10) + 1;
+
+  // General part(\d+) anywhere
+  const generalMatch = name.match(/part(\d+)/i);
+  if (generalMatch) return parseInt(generalMatch[1], 10);
+
+  return 0;
+}
+
+export function inferOriginalFileName(partNames: string[], manifestName?: string): string {
+  if (manifestName) return manifestName;
+  if (!partNames.length) return 'reassembled_file.bin';
+
+  const first = partNames[0];
+
+  // If WinRAR style: Movie.mp4.part1.rar -> Movie.mp4
+  const withoutArchiveExt = first.replace(/\.(rar|zip|7z)$/i, '');
+  const winrarMatch = withoutArchiveExt.match(/^(.*?)\.part\d+$/i);
+  if (winrarMatch) return winrarMatch[1];
+
+  // If Movie.mp4.part001 -> Movie.mp4
+  const partMatch = first.match(/^(.*?)\.part\d+(\.bin)?$/i);
+  if (partMatch) return partMatch[1];
+
+  // If Movie.mp4.001 -> Movie.mp4
+  const numMatch = first.match(/^(.*?)\.\d{3,4}$/);
+  if (numMatch) return numMatch[1];
+
+  return first.replace(/\.part\d+.*$/i, '') || 'reassembled_file.bin';
+}
+
 export async function reassembleFileFromParts(
   parts: PartInput[],
   manifest?: FileManifest,
   onProgress?: (progress: number, currentPart: number, totalParts: number) => void,
-  onLog?: (level: 'INFO' | 'SYS' | 'AUTH' | 'CHK' | 'WARN' | 'ERROR' | 'SUCCESS', msg: string) => void
+  onLog?: (level: 'INFO' | 'SYS' | 'AUTH' | 'CHK' | 'WARN' | 'ERROR' | 'SUCCESS', msg: string) => void,
+  password?: string
 ): Promise<ReassemblyResult> {
-  onLog?.('SYS', `Initiating reassembly process for ${parts.length} part(s)...`);
+  onLog?.('SYS', `Initiating WinRAR-compatible volume reassembly process for ${parts.length} part(s)...`);
 
   // Sort parts by detected index
   const sortedParts = [...parts].sort((a, b) => {
-    const getIndex = (name: string, fallbackIdx?: number) => {
-      if (fallbackIdx !== undefined) return fallbackIdx;
-      const match = name.match(/part(\d+)/i) || name.match(/\.(\d+)$/);
-      return match ? parseInt(match[1], 10) : 0;
-    };
-    return getIndex(a.name, a.index) - getIndex(b.name, b.index);
+    return parsePartIndex(a.name, a.index) - parsePartIndex(b.name, b.index);
   });
 
   const totalParts = sortedParts.length;
@@ -47,9 +87,10 @@ export async function reassembleFileFromParts(
 
   for (let i = 0; i < totalParts; i++) {
     const part = sortedParts[i];
-    onLog?.('CHK', `Validating shard [${i + 1}/${totalParts}]: "${part.name}" (${(part.blob.size / 1024).toFixed(1)} KB)`);
+    const detectedIdx = parsePartIndex(part.name, part.index);
+    onLog?.('CHK', `Validating volume [${i + 1}/${totalParts}] (Part #${detectedIdx || (i + 1)}): "${part.name}" (${(part.blob.size / (1024 * 1024)).toFixed(2)} MB)`);
 
-    // Verify individual checksum
+    // Verify individual checksum (before decryption, checksum is of encrypted data)
     const partHash = await calculateSHA256(part.blob);
     part.calculatedChecksum = partHash;
 
@@ -60,26 +101,42 @@ export async function reassembleFileFromParts(
         if (expectedPart.checksum.toLowerCase() === partHash.toLowerCase()) {
           part.isValid = true;
           verifiedCount++;
-          onLog?.('SUCCESS', `Part ${i + 1} SHA-256 MATCH: [${partHash.substring(0, 10)}...] ✓`);
+          onLog?.('SUCCESS', `Volume ${i + 1} SHA-256 MATCH: [${partHash.substring(0, 10)}...] ✓`);
         } else {
           part.isValid = false;
-          onLog?.('ERROR', `Part ${i + 1} HASH MISMATCH! Expected ${expectedPart.checksum.substring(0, 10)}..., Got ${partHash.substring(0, 10)}... ✗`);
+          onLog?.('ERROR', `Volume ${i + 1} HASH MISMATCH! Expected ${expectedPart.checksum.substring(0, 10)}..., Got ${partHash.substring(0, 10)}... ✗`);
           throw new Error(`Data integrity violation in ${part.name}: Checksum verification failed.`);
         }
       } else {
-        onLog?.('WARN', `Part ${part.name} not explicitly listed in manifest index, continuing...`);
+        onLog?.('WARN', `Volume ${part.name} not explicitly listed in manifest index, continuing...`);
       }
     }
 
-    // Handle decompression if compressed
     let rawChunkBlob = part.blob;
+
+    // Handle decryption if encrypted
+    if (manifest?.encrypted && password) {
+      try {
+        onLog?.('SYS', `Decrypting volume ${i + 1} with AES-256-GCM...`);
+        rawChunkBlob = await decryptBlob(rawChunkBlob, password);
+        onLog?.('SYS', `Decrypted volume ${i + 1} successfully (${rawChunkBlob.size}B).`);
+      } catch (err) {
+        onLog?.('ERROR', `Decryption failed for volume ${i + 1}. Wrong password? ${err}`);
+        throw new Error(`Decryption failed for ${part.name}. Please check your password.`);
+      }
+    } else if (manifest?.encrypted && !password) {
+      onLog?.('WARN', `Volume ${i + 1} is encrypted but no password provided.`);
+      throw new Error('This archive is password-protected. Please provide the decryption password.');
+    }
+
+    // Handle decompression if compressed
     if (manifest?.compressed && manifest.compressionType === 'gzip') {
       try {
         if (typeof DecompressionStream !== 'undefined') {
-          const stream = part.blob.stream().pipeThrough(new DecompressionStream('gzip'));
+          const stream = rawChunkBlob.stream().pipeThrough(new DecompressionStream('gzip'));
           const response = new Response(stream);
           rawChunkBlob = await response.blob();
-          onLog?.('SYS', `Decompressed shard ${i + 1} successfully.`);
+          onLog?.('SYS', `Decompressed volume ${i + 1} successfully.`);
         }
       } catch (err) {
         onLog?.('WARN', `Stream decompression fallback for ${part.name}: ${err}`);
@@ -111,7 +168,7 @@ export async function reassembleFileFromParts(
     onLog?.('INFO', `Reassembled Master SHA-256: ${masterChecksum}`);
   }
 
-  const fileName = manifest?.originalName || (sortedParts[0]?.name.replace(/\.part\d+$/i, '') || 'reassembled_file.bin');
+  const fileName = inferOriginalFileName(sortedParts.map(p => p.name), manifest?.originalName);
 
   return {
     file: finalBlob,

@@ -9,12 +9,14 @@ import {
   Image as ImageIcon,
   FileCode,
   Sliders,
-  Sparkles
+  Sparkles,
+  Save
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { formatBytes } from '../utils/crypto';
 import { compressGenericFile, CompressedAssetResult, CompressionOptions } from '../utils/compressor';
 import { soundManager } from '../utils/sound';
+import { fallbackDownloadBlob, promptSaveDirectory, writeBlobsToDirectory } from '../utils/saveHelper';
 
 interface CompressorViewProps {
   onLog: (level: 'INFO' | 'SYS' | 'AUTH' | 'CHK' | 'WARN' | 'ERROR' | 'SUCCESS', msg: string) => void;
@@ -33,6 +35,7 @@ export const CompressorView: React.FC<CompressorViewProps> = ({
   const [convertToWebP, setConvertToWebP] = useState<boolean>(true);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [results, setResults] = useState<CompressedAssetResult[]>([]);
+  const [savedDirHandle, setSavedDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -41,8 +44,16 @@ export const CompressorView: React.FC<CompressorViewProps> = ({
       const files = Array.from(e.target.files);
       setSelectedFiles(files);
       setResults([]);
+      setSavedDirHandle(null);
       onLog('INFO', `Loaded ${files.length} asset(s) for compression optimization.`);
     }
+  };
+
+  const getOrPromptDirectory = async (): Promise<FileSystemDirectoryHandle | null> => {
+    if (savedDirHandle) return savedDirHandle;
+    const dirHandle = await promptSaveDirectory();
+    if (dirHandle) setSavedDirHandle(dirHandle);
+    return dirHandle;
   };
 
   const handleStartCompression = async () => {
@@ -90,14 +101,31 @@ export const CompressorView: React.FC<CompressorViewProps> = ({
     }
   };
 
-  const handleDownloadSingle = (res: CompressedAssetResult) => {
-    const url = URL.createObjectURL(res.compressedBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = res.outputName;
-    a.click();
-    URL.revokeObjectURL(url);
-    onLog('INFO', `Downloaded optimized asset: ${res.outputName}`);
+  const handleDownloadSingle = async (res: CompressedAssetResult) => {
+    const dirHandle = await getOrPromptDirectory();
+    if (dirHandle) {
+      await writeBlobsToDirectory(dirHandle, [{ blob: res.compressedBlob, name: res.outputName }], false);
+      onLog('SUCCESS', `Saved optimized asset to directory: ${res.outputName}`);
+    } else {
+      fallbackDownloadBlob(res.compressedBlob, res.outputName);
+      onLog('INFO', `Downloaded optimized asset: ${res.outputName}`);
+    }
+  };
+
+  const handleDownloadAll = async () => {
+    if (results.length === 0) return;
+    const dirHandle = await getOrPromptDirectory();
+    if (dirHandle) {
+      const files = results.map(r => ({ blob: r.compressedBlob, name: r.outputName }));
+      const savedCount = await writeBlobsToDirectory(dirHandle, files, true);
+      onLog('SUCCESS', `Saved ${savedCount}/${results.length} compressed assets to chosen directory.`);
+    } else {
+      for (const res of results) {
+        fallbackDownloadBlob(res.compressedBlob, res.outputName);
+        await new Promise(r => setTimeout(r, 400));
+      }
+      onLog('SUCCESS', `All ${results.length} compressed assets dispatched to browser downloads.`);
+    }
   };
 
   const totalSavedBytes = results.reduce(
@@ -245,6 +273,15 @@ export const CompressorView: React.FC<CompressorViewProps> = ({
             <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
               Optimization Summary ({results.length} files, {formatBytes(totalSavedBytes)} saved)
             </h3>
+            {results.length > 1 && (
+              <button
+                onClick={handleDownloadAll}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition shadow-xs"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Save All to Folder</span>
+              </button>
+            )}
           </div>
 
           <div className="p-6 space-y-4">

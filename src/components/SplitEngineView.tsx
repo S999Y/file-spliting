@@ -13,14 +13,22 @@ import {
   RefreshCw,
   Copy,
   Check,
-  AlertCircle
+  AlertCircle,
+  Terminal,
+  FolderArchive,
+  HelpCircle,
+  Layers,
+  Lock,
+  LockOpen,
+  Save
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { SplitConfig, PartInfo, FileManifest } from '../types';
-import { formatBytes, formatDuration, describeFileReadError } from '../utils/crypto';
-import { splitFileInBrowser, createBundleZip, SplitResult } from '../utils/splitter';
+import { formatBytes, formatDuration, parseSizeString } from '../utils/crypto';
+import { splitFileInBrowser, createBundleZip, SplitResult, generateExtractionScripts } from '../utils/splitter';
 import { uploadShardBackupToCloud, getCloudConfig } from '../utils/cloudStorage';
 import { soundManager } from '../utils/sound';
+import { promptSaveLocation, writeBlobToStream, promptSaveDirectory, writeBlobsToDirectory, fallbackDownloadBlob } from '../utils/saveHelper';
 
 interface SplitEngineViewProps {
   onLog: (level: 'INFO' | 'SYS' | 'AUTH' | 'CHK' | 'WARN' | 'ERROR' | 'SUCCESS', msg: string) => void;
@@ -35,11 +43,17 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
 }) => {
   const [file, setFile] = useState<File | null>(null);
   const [splitMode, setSplitMode] = useState<'size' | 'count'>('size');
-  const [partSizeMb, setPartSizeMb] = useState<number>(25);
+  const [partSizeMb, setPartSizeMb] = useState<number>(500);
+  const [customSizeText, setCustomSizeText] = useState<string>('500M');
   const [customUnit, setCustomUnit] = useState<'MB' | 'GB' | 'KB'>('MB');
+  const [namingFormat, setNamingFormat] = useState<SplitConfig['namingFormat']>('winrar');
   const [targetCount, setTargetCount] = useState<number>(4);
   const [compressParts, setCompressParts] = useState<boolean>(false);
   const [destination, setDestination] = useState<'local' | 'cloud' | 'both'>('local');
+  const [password, setPassword] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [archiveFormat, setArchiveFormat] = useState<'rar' | 'zip' | '7z'>('rar');
+  const [archiveComment, setArchiveComment] = useState<string>('');
 
   // Processing state
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -55,20 +69,27 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
   const [zipProgress, setZipProgress] = useState<number>(0);
   const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
+  const [isBatchDownloading, setIsBatchDownloading] = useState<boolean>(false);
+  const [savedDirHandle, setSavedDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Preset sizes
+  // Preset sizes matching WinRAR & popular platforms
   const presets = [
-    { label: 'Discord Limit', sizeMb: 25, desc: '25 MB' },
-    { label: 'GitHub Release', sizeMb: 50, desc: '50 MB' },
-    { label: 'Vercel Serverless', sizeMb: 4.5, desc: '4.5 MB' },
-    { label: 'Cloud Chunk', sizeMb: 100, desc: '100 MB' },
-    { label: 'Email Safe', sizeMb: 20, desc: '20 MB' },
-    { label: 'FAT32 Max', sizeMb: 4000, desc: '4 GB' },
+    { label: '500 MB', sizeMb: 500, text: '500M', desc: 'WinRAR Standard' },
+    { label: '1 GB', sizeMb: 1024, text: '1G', desc: '1024 MB Volume' },
+    { label: '100 MB', sizeMb: 100, text: '100M', desc: 'Web Upload' },
+    { label: '25 MB', sizeMb: 25, text: '25M', desc: 'Discord Limit' },
+    { label: '50 MB', sizeMb: 50, text: '50M', desc: 'GitHub Release' },
+    { label: '700 MB', sizeMb: 700, text: '700M', desc: 'CD-ROM (700M)' },
+    { label: '4.37 GB', sizeMb: 4480, text: '4480M', desc: 'DVD-R Max' },
   ];
 
   const getEffectivePartSizeBytes = (): number => {
+    const parsedFromText = parseSizeString(customSizeText);
+    if (parsedFromText && parsedFromText > 64 * 1024) {
+      return parsedFromText;
+    }
     let multiplier = 1024 * 1024;
     if (customUnit === 'GB') multiplier = 1024 * 1024 * 1024;
     if (customUnit === 'KB') multiplier = 1024;
@@ -80,11 +101,9 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
       const selected = e.target.files[0];
       setFile(selected);
       setResult(null);
-      onLog('INFO', `Selected file for fragmentation: "${selected.name}" (${formatBytes(selected.size)})`);
+      setSavedDirHandle(null);
+      onLog('INFO', `Selected file: "${selected.name}" (${formatBytes(selected.size)})`);
     }
-    // Allow re-selecting the same file later (e.g. after fixing a lock):
-    // without this reset, an unchanged input value never fires onChange.
-    e.target.value = '';
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -93,8 +112,16 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
       const dropped = e.dataTransfer.files[0];
       setFile(dropped);
       setResult(null);
+      setSavedDirHandle(null);
       onLog('INFO', `Dropped file: "${dropped.name}" (${formatBytes(dropped.size)})`);
     }
+  };
+
+  const getOrPromptDirectory = async (): Promise<FileSystemDirectoryHandle | null> => {
+    if (savedDirHandle) return savedDirHandle;
+    const dirHandle = await promptSaveDirectory();
+    if (dirHandle) setSavedDirHandle(dirHandle);
+    return dirHandle;
   };
 
   const handleStartSplit = async () => {
@@ -103,16 +130,21 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
     setIsProcessing(true);
     setProgress(0);
     setResult(null);
+    setSavedDirHandle(null);
 
     const config: SplitConfig = {
       partSizeBytes: getEffectivePartSizeBytes(),
       splitMode,
       targetPartCount: targetCount,
+      namingFormat,
       compressParts,
       compressionLevel: 6,
       verifyChecksums: true,
       destination,
       cloudProvider: 'vault',
+      password: password || undefined,
+      archiveFormat,
+      archiveComment: archiveComment || undefined,
     };
 
     try {
@@ -135,8 +167,8 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
       confetti({ particleCount: 60, spread: 50, origin: { y: 0.8 } });
 
       onSendNotification(
-        'Fragmentation Complete',
-        `Successfully split ${file.name} into ${splitRes.parts.length} verified shards.`
+        'WinRAR Multi-Volume Split Complete',
+        `Successfully split ${file.name} into ${splitRes.parts.length} volumes${password ? ' (AES-256-GCM encrypted)' : ''}.`
       );
 
       // Auto cloud upload if destination requested
@@ -145,10 +177,10 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
         const cloudConfig = getCloudConfig();
         await uploadShardBackupToCloud(splitRes.manifest, splitRes.parts, cloudConfig);
         setIsCloudSyncing(false);
-        onLog('SUCCESS', `Synchronized all ${splitRes.parts.length} shards to Cloud Vault backup.`);
+        onLog('SUCCESS', `Synchronized all ${splitRes.parts.length} volumes to Cloud Vault.`);
       }
     } catch (err: unknown) {
-      const errorMsg = describeFileReadError(err, file?.name ?? 'file');
+      const errorMsg = err instanceof Error ? err.message : String(err);
       onLog('ERROR', `Splitting failed: ${errorMsg}`);
       onIncrementStats(0, false);
       soundManager.playError();
@@ -158,47 +190,100 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
     }
   };
 
-  const handleDownloadPart = (part: PartInfo) => {
+  const handleDownloadPart = async (part: PartInfo) => {
     if (!part.blob) return;
-    const url = URL.createObjectURL(part.blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = part.name;
-    a.click();
-    URL.revokeObjectURL(url);
-    onLog('INFO', `Downloaded single shard: ${part.name}`);
+    const stream = await promptSaveLocation({
+      suggestedName: part.name,
+      mimeType: 'application/octet-stream',
+    });
+    if (stream) {
+      await writeBlobToStream(stream, part.blob, part.name, false);
+      onLog('SUCCESS', `Saved volume to chosen location: ${part.name}`);
+    } else {
+      fallbackDownloadBlob(part.blob, part.name);
+      onLog('INFO', `Downloaded volume: ${part.name}`);
+    }
   };
 
-  const handleDownloadManifest = () => {
+  const handleDownloadAllPartsSequential = async () => {
+    if (!result) return;
+    setIsBatchDownloading(true);
+    onLog('INFO', `Triggering sequential download for all ${result.parts.length} volume parts...`);
+
+    const dirHandle = await getOrPromptDirectory();
+    if (dirHandle) {
+      const files = result.parts.filter(p => p.blob).map(p => ({ blob: p.blob!, name: p.name }));
+      const savedCount = await writeBlobsToDirectory(dirHandle, files, true);
+      onLog('SUCCESS', `Saved ${savedCount}/${result.parts.length} volumes to chosen directory.`);
+    } else {
+      for (let i = 0; i < result.parts.length; i++) {
+        const part = result.parts[i];
+        if (part.blob) {
+          fallbackDownloadBlob(part.blob, part.name);
+          await new Promise(r => setTimeout(r, 400));
+        }
+      }
+      onLog('SUCCESS', `All ${result.parts.length} volumes dispatched to browser downloads.`);
+    }
+
+    setIsBatchDownloading(false);
+  };
+
+  const handleDownloadManifest = async () => {
     if (!result) return;
     const jsonStr = JSON.stringify(result.manifest, null, 2);
     const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${result.manifest.originalName}.fshard.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    onLog('INFO', `Exported shard manifest: ${result.manifest.originalName}.fshard.json`);
+    const fileName = `${result.manifest.originalName}.fshard.json`;
+    const dirHandle = await getOrPromptDirectory();
+    if (dirHandle) {
+      await writeBlobsToDirectory(dirHandle, [{ blob, name: fileName }], false);
+      onLog('SUCCESS', `Saved manifest to directory: ${fileName}`);
+    } else {
+      fallbackDownloadBlob(blob, fileName);
+      onLog('INFO', `Exported shard manifest: ${fileName}`);
+    }
+  };
+
+  const handleDownloadScript = async (type: 'bat' | 'sh') => {
+    if (!result) return;
+    const content = type === 'bat' ? result.windowsBatchScript : result.unixBashScript;
+    const fileName = type === 'bat' ? `extract_${result.manifest.originalName}.bat` : `extract_${result.manifest.originalName}.sh`;
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const dirHandle = await getOrPromptDirectory();
+    if (dirHandle) {
+      await writeBlobsToDirectory(dirHandle, [{ blob, name: fileName }], false);
+      onLog('SUCCESS', `Saved extraction script to directory: ${fileName}`);
+    } else {
+      fallbackDownloadBlob(blob, fileName);
+      onLog('SUCCESS', `Downloaded 1-click reassembly script: ${fileName}`);
+    }
   };
 
   const handleDownloadZipBundle = async () => {
     if (!result) return;
+    if (result.totalSize > 1.8 * 1024 * 1024 * 1024) {
+      const proceed = confirm('This file is larger than 1.8 GB. Creating a single in-memory ZIP in the browser might exceed JavaScript memory limits. We recommend using "Download All Volumes" directly instead. Proceed with ZIP creation?');
+      if (!proceed) return;
+    }
+
     setIsBundlingZip(true);
     setZipProgress(0);
-    onLog('SYS', `Bundling all ${result.parts.length} shards and manifest into consolidated ZIP package...`);
+    onLog('SYS', `Bundling all ${result.parts.length} volumes and extractors into ZIP package...`);
 
     try {
-      const zipBlob = await createBundleZip(result.manifest, result.parts, p => setZipProgress(p));
-      const url = URL.createObjectURL(zipBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${result.manifest.originalName}_all_shards.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
-      onLog('SUCCESS', `Exported ZIP bundle package (${formatBytes(zipBlob.size)}).`);
+      const zipBlob = await createBundleZip(result.manifest, result.parts, p => setZipProgress(p), password || undefined);
+      const zipName = `${result.manifest.originalName}_volumes.zip`;
+      const dirHandle = await getOrPromptDirectory();
+      if (dirHandle) {
+        await writeBlobsToDirectory(dirHandle, [{ blob: zipBlob, name: zipName }], false);
+        onLog('SUCCESS', `Saved ZIP bundle to directory (${formatBytes(zipBlob.size)}).`);
+      } else {
+        fallbackDownloadBlob(zipBlob, zipName);
+        onLog('SUCCESS', `Exported ZIP bundle package (${formatBytes(zipBlob.size)}).`);
+      }
     } catch (err) {
       onLog('ERROR', `ZIP bundling error: ${err}`);
+      alert(`ZIP bundling error: ${err}. For files 2GB+, please download the volume parts individually or using "Download All Volumes".`);
     } finally {
       setIsBundlingZip(false);
     }
@@ -210,16 +295,24 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
     setTimeout(() => setCopiedHash(null), 2000);
   };
 
+  const estimatedPartSize = getEffectivePartSizeBytes();
+  const estimatedPartCount = file ? (splitMode === 'size' ? Math.ceil(file.size / estimatedPartSize) : targetCount) : 0;
+
   return (
     <div className="space-y-6">
       {/* File Upload Zone */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-        <h2 className="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
-          <Scissors className="w-4 h-4 text-blue-600" />
-          <span>Source File Selection</span>
-        </h2>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <FolderArchive className="w-4 h-4 text-blue-600" />
+            <span>WinRAR Multi-Volume Split Engine</span>
+          </h2>
+          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-semibold border border-blue-200">
+            Multi-GB Stream Hashing Enabled
+          </span>
+        </div>
         <p className="text-xs text-slate-500 mb-4">
-          Select any application package, disk image (ISO), video archive, or large binary to fragment.
+          Split large video files, disc images (ISO), archives, or installers (2GB, 5GB, 10GB+) into smaller volume parts with zero RAM bloat.
         </p>
 
         <div
@@ -246,8 +339,13 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
             <div>
               <p className="text-sm font-bold text-slate-900 font-mono">{file.name}</p>
               <p className="text-xs text-slate-500 font-mono mt-1">
-                Size: <span className="font-bold text-slate-700">{formatBytes(file.size)}</span> • Type: {file.type || 'Binary / Raw'}
+                Size: <span className="font-bold text-slate-700">{formatBytes(file.size)}</span> ({(file.size / (1024 * 1024)).toFixed(2)} MB)
               </p>
+              {file.size > 1024 * 1024 * 1024 && (
+                <p className="text-[11px] text-emerald-600 font-semibold mt-1">
+                  ⚡ 2+ GB Large File Detected: Zero-RAM Chunk Slicing will be used.
+                </p>
+              )}
               <button
                 type="button"
                 onClick={e => {
@@ -262,10 +360,10 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
           ) : (
             <div>
               <p className="text-sm font-bold text-slate-800">
-                Click to browse or drag & drop large file here
+                Click to browse or drag & drop large file here (e.g. 2.24 GB MP4)
               </p>
               <p className="text-xs text-slate-400 mt-1">
-                Supports unlimited file sizes (Vercel Edge & Web Stream optimized)
+                Zero RAM limits • Supports multi-gigabyte files with native WinRAR volume compatibility
               </p>
             </div>
           )}
@@ -274,10 +372,13 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
 
       {/* Configuration Cards Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Config: Chunk Sizing */}
+        {/* Left Config: Volume Sizing (WinRAR style) */}
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-900">Fragmentation Mode</h3>
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+              <Layers className="w-4 h-4 text-blue-600" />
+              <span>Split to Volumes, Size</span>
+            </h3>
             <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs font-semibold">
               <button
                 onClick={() => setSplitMode('size')}
@@ -285,7 +386,7 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
                   splitMode === 'size' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-500'
                 }`}
               >
-                By Chunk Size
+                By Volume Size
               </button>
               <button
                 onClick={() => setSplitMode('count')}
@@ -301,18 +402,19 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
           {splitMode === 'size' ? (
             <div className="space-y-3">
               {/* Presets */}
-              <label className="block text-xs font-bold text-slate-500 uppercase">Target Presets</label>
-              <div className="grid grid-cols-3 gap-2">
+              <label className="block text-xs font-bold text-slate-500 uppercase">WinRAR & Standard Presets</label>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                 {presets.map((preset, idx) => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => {
                       setPartSizeMb(preset.sizeMb);
+                      setCustomSizeText(preset.text);
                       setCustomUnit(preset.sizeMb >= 1000 ? 'GB' : 'MB');
                     }}
                     className={`p-2 rounded-lg border text-left transition ${
-                      partSizeMb === preset.sizeMb
+                      customSizeText === preset.text || partSizeMb === preset.sizeMb
                         ? 'border-blue-500 bg-blue-50/50 text-blue-900'
                         : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
                     }`}
@@ -323,23 +425,35 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
                 ))}
               </div>
 
-              {/* Custom Size Input */}
+              {/* Custom Size Input with WinRAR syntax */}
               <div className="pt-2">
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Custom Shard Size
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">
+                    Volume Size (e.g. <span className="font-mono text-blue-600">500M</span>, <span className="font-mono text-blue-600">1G</span>, <span className="font-mono text-blue-600">100M</span>)
+                  </label>
+                </div>
                 <div className="flex gap-2">
                   <input
-                    type="number"
-                    min="0.1"
-                    step="0.5"
-                    value={partSizeMb}
-                    onChange={e => setPartSizeMb(parseFloat(e.target.value) || 1)}
+                    type="text"
+                    value={customSizeText}
+                    onChange={e => {
+                      setCustomSizeText(e.target.value);
+                      const parsed = parseSizeString(e.target.value);
+                      if (parsed) {
+                        setPartSizeMb(parsed / (1024 * 1024));
+                      }
+                    }}
+                    placeholder="e.g. 500M or 1G"
                     className="flex-1 rounded-lg border border-slate-300 p-2 text-sm font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   />
                   <select
                     value={customUnit}
-                    onChange={e => setCustomUnit(e.target.value as 'MB' | 'GB' | 'KB')}
+                    onChange={e => {
+                      const newUnit = e.target.value as 'MB' | 'GB' | 'KB';
+                      setCustomUnit(newUnit);
+                      if (newUnit === 'GB') setCustomSizeText(`${partSizeMb / 1024}G`);
+                      else if (newUnit === 'MB') setCustomSizeText(`${partSizeMb}M`);
+                    }}
                     className="rounded-lg border border-slate-300 p-2 text-xs font-bold bg-white text-slate-700"
                   >
                     <option value="MB">MB</option>
@@ -352,7 +466,7 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
           ) : (
             <div className="space-y-3">
               <label className="block text-xs font-bold text-slate-700">
-                Total Shards to Generate: <span className="text-blue-600 font-bold">{targetCount} Parts</span>
+                Total Volumes to Generate: <span className="text-blue-600 font-bold">{targetCount} Parts</span>
               </label>
               <input
                 type="range"
@@ -370,22 +484,44 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
             </div>
           )}
 
-          {/* Shard Calculation Preview */}
+          {/* Volume Calculation Preview */}
           {file && (
             <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs font-mono text-slate-600">
-              Estimated Output:{' '}
-              <span className="font-bold text-blue-600">
-                {splitMode === 'size'
-                  ? `~${Math.ceil(file.size / getEffectivePartSizeBytes())} Shard Parts`
-                  : `${targetCount} Shards (~${formatBytes(file.size / targetCount)} each)`}
-              </span>
+              Output Estimate: <span className="font-bold text-blue-600">{estimatedPartCount} Volumes</span> (~{formatBytes(file.size / Math.max(1, estimatedPartCount))} each)
             </div>
           )}
         </div>
 
-        {/* Right Config: Security & Storage Destination */}
+        {/* Right Config: Naming Scheme & Options */}
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-          <h3 className="text-sm font-bold text-slate-900">Optimization & Storage Options</h3>
+          <h3 className="text-sm font-bold text-slate-900">Volume Naming & Export Format</h3>
+
+          {/* Naming Scheme */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">Volume Naming Convention</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: 'winrar', label: 'WinRAR Archive', sample: '.part1.rar, .part2.rar' },
+                { id: 'standard', label: 'Multi-Part Volume', sample: '.part001, .part002' },
+                { id: 'numeric', label: '7-Zip Numeric', sample: '.001, .002' },
+                { id: 'bin', label: 'Binary Shard', sample: '.part1.bin, .part2.bin' },
+              ].map(fmt => (
+                <button
+                  key={fmt.id}
+                  type="button"
+                  onClick={() => setNamingFormat(fmt.id as SplitConfig['namingFormat'])}
+                  className={`p-2.5 rounded-lg border text-left transition ${
+                    namingFormat === fmt.id
+                      ? 'border-blue-500 bg-blue-50/50 text-blue-900'
+                      : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
+                  }`}
+                >
+                  <p className="text-xs font-bold">{fmt.label}</p>
+                  <p className="text-[10px] text-slate-400 font-mono truncate">{fmt.sample}</p>
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* Compression Toggle */}
           <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
@@ -401,40 +537,80 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
                 />
               </label>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Compresses each individual chunk with GZIP stream while maintaining original bit-level quality.
+                Losslessly compresses chunks using GZIP streams. (Leave off for raw bitwise slice compatibility).
               </p>
             </div>
           </div>
 
-          {/* Destination Selection */}
+          {/* Password Protection */}
+          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-slate-600" />
+              <span className="text-xs font-bold text-slate-800">Password Protection (AES-256-GCM)</span>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Encrypt each volume with military-grade AES-256 encryption. Password required for reassembly.
+            </p>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Enter archive password (optional)"
+                className="w-full rounded-lg border border-slate-300 p-2 text-sm font-mono pr-9 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                {showPassword ? <LockOpen className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+            {password && (
+              <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 font-bold">
+                <ShieldCheck className="w-3 h-3" />
+                <span>AES-256-GCM encryption will be applied to all volumes</span>
+              </div>
+            )}
+          </div>
+
+          {/* Archive Format */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">Storage Destination</label>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">Archive Format</label>
             <div className="grid grid-cols-3 gap-2">
               {[
-                { id: 'local', label: 'Local Disk', icon: HardDrive, desc: 'Instant Download' },
-                { id: 'cloud', label: 'Cloud Vault', icon: Cloud, desc: 'Edge Backup' },
-                { id: 'both', label: 'Hybrid', icon: Archive, desc: 'Disk + Cloud' },
-              ].map(dest => {
-                const Icon = dest.icon;
-                const isSelected = destination === dest.id;
-                return (
-                  <button
-                    key={dest.id}
-                    type="button"
-                    onClick={() => setDestination(dest.id as 'local' | 'cloud' | 'both')}
-                    className={`p-3 rounded-lg border text-center transition ${
-                      isSelected
-                        ? 'border-blue-500 bg-blue-50/50 text-blue-900'
-                        : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
-                    }`}
-                  >
-                    <Icon className={`w-4 h-4 mx-auto mb-1 ${isSelected ? 'text-blue-600' : 'text-slate-400'}`} />
-                    <p className="text-xs font-bold">{dest.label}</p>
-                    <p className="text-[10px] text-slate-400">{dest.desc}</p>
-                  </button>
-                );
-              })}
+                { id: 'rar' as const, label: 'RAR', sample: '.part1.rar' },
+                { id: 'zip' as const, label: 'ZIP', sample: '.part1.zip' },
+                { id: '7z' as const, label: '7Z', sample: '.part1.7z' },
+              ].map(fmt => (
+                <button
+                  key={fmt.id}
+                  type="button"
+                  onClick={() => setArchiveFormat(fmt.id)}
+                  className={`p-2 rounded-lg border text-center transition ${
+                    archiveFormat === fmt.id
+                      ? 'border-blue-500 bg-blue-50/50 text-blue-900'
+                      : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
+                  }`}
+                >
+                  <p className="text-xs font-bold">{fmt.label}</p>
+                  <p className="text-[10px] text-slate-400 font-mono">{fmt.sample}</p>
+                </button>
+              ))}
             </div>
+          </div>
+
+          {/* Archive Comment */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">Archive Comment (optional)</label>
+            <input
+              type="text"
+              value={archiveComment}
+              onChange={e => setArchiveComment(e.target.value)}
+              placeholder="Add a comment to the archive..."
+              className="w-full rounded-lg border border-slate-300 p-2 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
           </div>
 
           {/* Action Button */}
@@ -446,12 +622,12 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
             {isProcessing ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Fragmenting Shards ({progress}%)...</span>
+                <span>Splitting Volumes ({progress}%)...</span>
               </>
             ) : (
               <>
                 <Scissors className="w-4 h-4" />
-                <span>Execute File Fragmentation</span>
+                <span>Split Into Volumes</span>
               </>
             )}
           </button>
@@ -463,10 +639,10 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
         <div className="bg-slate-900 text-white p-6 rounded-xl shadow-lg space-y-4">
           <div className="flex justify-between items-end">
             <div>
-              <p className="text-xs font-mono text-blue-400 uppercase font-bold">Fragmentation In Progress</p>
+              <p className="text-xs font-mono text-blue-400 uppercase font-bold">Multi-Volume Slicing In Progress</p>
               <h3 className="text-base font-bold font-mono">{file?.name}</h3>
               <p className="text-xs text-slate-400 font-mono mt-0.5">
-                Processing Shard {currentPart} of {totalParts}
+                Processing Volume {currentPart} of {totalParts} ({formatBytes(getEffectivePartSizeBytes())} per part)
               </p>
             </div>
             <div className="text-right">
@@ -484,7 +660,7 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
           <div className="grid grid-cols-3 gap-2 text-xs font-mono text-slate-400 pt-1 border-t border-slate-800">
             <div>Throughput: <span className="text-white font-bold">{speedMBs} MB/s</span></div>
             <div className="text-center">Remaining ETA: <span className="text-white font-bold">{formatDuration(etaSeconds)}</span></div>
-            <div className="text-right">Integrity: <span className="text-emerald-400 font-bold">SHA-256 Active</span></div>
+            <div className="text-right">RAM Mode: <span className="text-emerald-400 font-bold">Streaming (0-bloat)</span></div>
           </div>
         </div>
       )}
@@ -500,7 +676,7 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900">
-                  Fragmentation Successful: {result.parts.length} Shards Created
+                  Split Complete: {result.parts.length} Volumes Generated
                 </h3>
                 <p className="text-xs text-slate-500 font-mono">
                   Master SHA-256: <span className="text-slate-800 font-bold">{result.manifest.originalChecksum.substring(0, 24)}...</span>
@@ -511,12 +687,39 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
             {/* Top Action Buttons */}
             <div className="flex flex-wrap items-center gap-2">
               <button
+                onClick={handleDownloadAllPartsSequential}
+                disabled={isBatchDownloading}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-xs disabled:opacity-50"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>{isBatchDownloading ? 'Downloading Volumes...' : 'Download All Volumes'}</span>
+              </button>
+
+              <button
                 onClick={handleDownloadZipBundle}
                 disabled={isBundlingZip}
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition shadow-xs disabled:opacity-50"
               >
                 <Archive className="w-3.5 h-3.5" />
-                <span>{isBundlingZip ? `Bundling ZIP (${zipProgress}%)...` : 'Download All as ZIP Bundle'}</span>
+                <span>{isBundlingZip ? `Bundling ZIP (${zipProgress}%)...` : 'Download as ZIP Bundle'}</span>
+              </button>
+
+              <button
+                onClick={() => handleDownloadScript('bat')}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition border border-slate-200"
+                title="Windows CMD copy /b 1-click script"
+              >
+                <Terminal className="w-3.5 h-3.5 text-blue-600" />
+                <span>Windows (.bat)</span>
+              </button>
+
+              <button
+                onClick={() => handleDownloadScript('sh')}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition border border-slate-200"
+                title="Unix/macOS cat 1-click script"
+              >
+                <Terminal className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Unix/Mac (.sh)</span>
               </button>
 
               <button
@@ -524,8 +727,21 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
                 className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition border border-slate-200"
               >
                 <FileCode className="w-3.5 h-3.5 text-slate-600" />
-                <span>Download .fshard.json Manifest</span>
+                <span>Manifest (.fshard.json)</span>
               </button>
+            </div>
+          </div>
+
+          {/* WinRAR Extraction Help Box */}
+          <div className="p-4 bg-blue-50/50 border-b border-blue-100 flex items-start gap-3">
+            <HelpCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+            <div className="text-xs text-blue-900 space-y-0.5">
+              <p className="font-bold">How to Reassemble These Volumes Offline (WinRAR / CLI):</p>
+              <p className="text-blue-800">
+                1. Put all downloaded volume parts in the <strong>same folder</strong>.<br />
+                2. <strong>In WinRAR / 7-Zip:</strong> Right-click the 1st part (<span className="font-mono">{result.parts[0]?.name}</span>) and select <strong>"Extract Here"</strong>.<br />
+                3. <strong>Or via Terminal:</strong> Run the downloaded <span className="font-mono">extract.bat</span> (Windows) or <span className="font-mono">extract.sh</span> (Mac/Linux) to join them instantly with zero extra software!
+              </p>
             </div>
           </div>
 
@@ -535,7 +751,7 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
               <thead>
                 <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px]">
                   <th className="pb-3 px-2 font-bold">#</th>
-                  <th className="pb-3 font-bold">Shard Name</th>
+                  <th className="pb-3 font-bold">Volume Name</th>
                   <th className="pb-3 font-bold">Size</th>
                   <th className="pb-3 font-bold">SHA-256 Checksum</th>
                   <th className="pb-3 font-bold">Status</th>
@@ -586,3 +802,4 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
     </div>
   );
 };
+

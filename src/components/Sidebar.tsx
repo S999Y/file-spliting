@@ -9,9 +9,10 @@ import {
   ShieldCheck,
   Volume2,
   VolumeX,
-  HardDrive
+  Download
 } from 'lucide-react';
 import { soundManager } from '../utils/sound';
+import { downloadDataJson } from '../utils/dataStorage';
 
 interface SidebarProps {
   activeTab: string;
@@ -30,7 +31,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'split', label: 'Split Engine', icon: Scissors },
     { id: 'reassemble', label: 'Reassembly', icon: LinkIcon },
-    { id: 'compress', label: 'Asset Compressor', icon: Zap },
+    { id: 'compress', label: 'Compressor', icon: Zap },
     { id: 'batch', label: 'Batch Queue', icon: Package },
     { id: 'cloud', label: 'Cloud Storage', icon: Cloud },
     { id: 'integrity', label: 'Checksum Verifier', icon: ShieldCheck },
@@ -55,7 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             FRAGMENT<span className="text-blue-400">.IO</span>
           </span>
           <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-1">
-            v2.4 • Edge Edition
+            v3.0
           </span>
         </div>
       </div>
@@ -82,15 +83,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </nav>
 
-      {/* Storage & Edge Node Status footer */}
-      <div className="p-4 mt-auto border-t border-slate-800 space-y-3 bg-slate-950/40">
+      {/* Footer */}
+      <div className="p-4 mt-auto border-t border-slate-800 space-y-2 bg-slate-950/40">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-            <span className="text-[11px] text-slate-300 font-medium tracking-tight">
-              Edge: Northern-VA
-            </span>
-          </div>
           <button
             onClick={toggleSound}
             title={soundEnabled ? 'Mute notification chimes' : 'Enable notification chimes'}
@@ -98,22 +93,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-blue-400" /> : <VolumeX className="w-3.5 h-3.5" />}
           </button>
-        </div>
-
-        <div className="bg-slate-800/80 rounded-lg p-3 border border-slate-700/50">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
-              <HardDrive className="w-3 h-3 text-slate-400" /> Local Vault
-            </span>
-            <span className="text-[10px] text-emerald-400 font-mono font-semibold">Ready</span>
-          </div>
-          <div className="w-full bg-slate-700 h-1.5 rounded-full mb-1.5 overflow-hidden">
-            <div className="bg-blue-500 h-full w-[68%] rounded-full"></div>
-          </div>
-          <div className="flex justify-between text-[10px] text-slate-300 font-mono">
-            <span>842.5 GB</span>
-            <span className="text-slate-500">1.2 TB</span>
-          </div>
+          <button
+            onClick={downloadDataJson}
+            title="Export all data as JSON"
+            className="flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-white px-2 py-1 rounded hover:bg-slate-800 transition"
+          >
+            <Download className="w-3 h-3" />
+            <span>Export Data</span>
+          </button>
         </div>
       </div>
     </aside>

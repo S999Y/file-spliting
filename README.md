@@ -1,67 +1,412 @@
 <div align="center">
 
-# FileShard
+# FRAGMENT.IO / FileShard
 
-**A robust toolkit for splitting, compressing, verifying, and reassembling large files — entirely in your browser.**
+### WinRAR-compatible file splitting, compression, encryption & reassembly — entirely in your browser.
 
-React · TypeScript · Vite · Tailwind CSS · Node.js
+![Version](https://img.shields.io/badge/version-3.0.0-2563eb?style=flat-square&label=Version)
+![License](https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square&label=License)
+![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square&label=React)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6?style=flat-square&label=TypeScript)
+![Vite](https://img.shields.io/badge/Vite-6-646cff?style=flat-square&label=Vite)
+![Node](https://img.shields.io/badge/Node.js-%3E%3D18-339933?style=flat-square&label=Node.js)
+
+<br />
+
+**[Features](#features)** | **[User Guide](USER_GUIDE.md)** | **[Quick Start](#quick-start)** | **[How It Works](#how-it-works)** | **[API Reference](#api-reference)** | **[Architecture](#architecture)** | **[Deployment](#deployment)**
 
 </div>
 
 ---
 
-## Overview
+## What is FileShard?
 
-FileShard breaks large files into verified shards, compresses them, and reassembles them bit-for-bit with cryptographic integrity guarantees. All heavy lifting — slicing, hashing, compression, and stitching — happens client-side using the Web Crypto and Compression Streams APIs, so your data never has to leave the machine. An optional Node.js/Express backend exposes the same split/compress/reassemble operations as REST endpoints for automation and headless workflows.
+FileShard is a browser-first file toolkit that replicates the core workflow of **WinRAR / 7-Zip** multi-volume archiving — splitting, reassembling, encrypting, and compressing files — entirely client-side using the Web Crypto API, Compression Streams API, and Canvas API.
+
+No file data ever leaves your machine unless you explicitly choose to upload it to a cloud provider. Your files stay private.
+
+> **New to FileShard?** Read the **[Complete User Guide](USER_GUIDE.md)** for step-by-step instructions on splitting, reassembling, encrypting, and verifying any file.
+
+### Key Differentiators
+
+| Feature | FileShard | WinRAR / 7-Zip |
+|---|---|---|
+| **Runs in** | Browser (zero install) | Desktop (requires install) |
+| **Encryption** | AES-256-GCM (Web Crypto API) | AES-256 (proprietary) |
+| **Password Protection** | Yes | Yes |
+| **Multi-Volume Split** | Yes | Yes |
+| **WinRAR Naming** | `.part1.rar`, `.001`, `.part001` | Native |
+| **Checksum Verification** | SHA-256 per-part + master | CRC32 (weaker) |
+| **Batch Processing** | Queue-based with single save | No native batch |
+| **Native Save Dialogs** | OS-level file/folder pickers | Native |
+| **Cross-Platform** | Any browser, any OS | OS-specific |
+
+---
 
 ## Features
 
-| Module | Description |
-|---|---|
-| **Split Engine** | Fragment any file by target size *or* part count. Optional per-part GZIP compression, per-part + master SHA-256 checksums, real-time progress/speed/ETA, and one-click ZIP bundle download including a `.fshard.json` manifest. |
-| **Reassemble** | Rebuild the original file from its shards. Validates every part against the manifest before stitching, transparently decompresses GZIP shards, and confirms the final master checksum. |
-| **Compressor** | Lossless/balanced/maximum modes for images with optional WebP conversion, max-dimension resizing, and ZIP/GZIP archive output — all via Canvas APIs. |
-| **Batch Queue** | Queue many split/compress/verify jobs at once with live status, throughput, pause/resume, and per-item results. |
-| **Cloud Storage** | Register shard backups against configurable provider targets (AWS S3, Cloudflare R2, Vercel Blob, Google Cloud Storage) with backup registry persistence via `localStorage`. |
-| **Integrity Tool** | Standalone checksum calculator and verifier for arbitrary files. |
-| **Dashboard & Audit Logs** | System statistics, live operation audit stream (`SYS`, `CHK`, `AUTH`, `ERROR`…), desktop notifications, and synthesized audio feedback via the Web Audio API. |
+### Split Engine
+
+Split any file into smaller volume parts with WinRAR-compatible naming conventions.
+
+- **7 size presets** — Discord (25 MB), GitHub (50 MB), WinRAR Standard (500 MB), CD-ROM (700 MB), DVD-R (4.37 GB)
+- **Custom sizes** — `500M`, `1G`, `4.7G` syntax (WinRAR-style)
+- **4 naming formats** — WinRAR `.part1.rar`, Multi-Part `.part001`, 7-Zip Numeric `.001`, Binary Shard `.part1.bin`
+- **Optional GZIP compression** per volume
+- **Real-time progress** — speed (MB/s), ETA, RAM usage indicator
+- **One-click extraction scripts** — Windows `.bat` and Unix `.sh` included
+- **ZIP bundle export** — all parts + manifest + scripts in one archive
+
+### Password Protection (AES-256-GCM)
+
+Encrypt every volume with military-grade AES-256 encryption.
+
+- **PBKDF2 key derivation** — 100,000 SHA-256 iterations
+- **Per-part IV** — unique initialization vector per volume
+- **Manifest integration** — encryption metadata stored in `.fshard.json`
+- **Password prompt on reassembly** — wrong password produces a clear error message
+- **WinRAR-style workflow** — set password before split, enter password before extract
+
+### Native Save Location Dialogs
+
+Uses the **File System Access API** for native OS save dialogs.
+
+- **Single operations** (Split, Reassemble, Compress) — prompted after processing
+- **Batch operations** — directory picker shown **once** before the queue starts, all results saved there
+- **Folder picker** — "Extract Here" vs "Extract to Folder" modes
+- **Graceful fallback** — falls back to browser downloads on unsupported browsers (Safari, older Firefox)
+
+### Reassembly
+
+Rebuild original files from volume parts with cryptographic verification.
+
+- Auto-detects part ordering from filename patterns (`.part1.rar`, `.001`, `.r00`, `.part001`)
+- Validates every part SHA-256 against manifest
+- Transparently decrypts AES-256-GCM volumes
+- Transparently decompresses GZIP volumes
+- Verifies master checksum on reconstructed file
+- "Extract Here" / "Extract to Folder" options with manifest info display
+
+### Asset Compressor
+
+Optimize images and generic files with multiple compression profiles.
+
+- **Lossless** — bit-identical compression
+- **Balanced** — perceptually lossless with up to 60-80% savings
+- **Maximum** — high-density compression
+- WebP conversion, quality slider, max-dimension resizing
+- Generic file ZIP/DEFLATE compression
+- Batch compress with single save location
+
+### Batch Queue
+
+Queue multiple files for sequential processing with a shared save destination.
+
+- Split or compress operation modes
+- Live progress per item
+- Password protection for all splits in the batch
+- **Single directory picker** for the entire batch
+- Status tracking: QUEUED, PROCESSING, COMPLETED, FAILED
+
+### Cloud Storage
+
+Register shard backups against configurable cloud providers.
+
+- AWS S3, Cloudflare R2, Vercel Blob, Google Cloud Storage
+- Backup registry with localStorage persistence
+- One-click restore to reassembly workspace
+
+### Integrity Tool
+
+Standalone SHA-256 checksum calculator and verifier.
+
+- Drag-and-drop any file
+- Instant hash computation (memory-safe streaming for multi-GB files)
+- Expected hash comparison with visual match/mismatch verdict
+
+### Dashboard & Audit Logs
+
+System statistics with a live terminal-style audit stream.
+
+- 7 log levels (INFO, SYS, AUTH, CHK, WARN, ERROR, SUCCESS)
+- Desktop notifications via Notification API
+- Synthesized audio feedback via Web Audio API
+- Exportable logs to `.txt`
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- **Node.js** >= 18 (or [Bun](https://bun.sh))
+- npm, yarn, or pnpm
+
+### Install & Run
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/fileshard.git
+cd fileshard
+
+# Install dependencies
+npm install
+
+# Start development server (Express API + Vite HMR on port 3000)
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### Production Build
+
+```bash
+# Build client bundle + server
+npm run build
+
+# Run production server
+npm start
+```
+
+---
+
+## How It Works
+
+### Splitting a File
+
+1. **Select a file** — drag-and-drop or click to browse (supports multi-GB files)
+2. **Configure** — choose volume size, naming format, compression, and password
+3. **Split** — FileShard slices the file, computes SHA-256 checksums, optionally compresses and encrypts each part
+4. **Save** — native OS dialog asks where to save the volumes (or "Download All" for browser fallback)
+
+### Reassembling a File
+
+1. **Upload volume parts** — drag all `.part*` or `.001` files
+2. **Load manifest** (optional) — upload `.fshard.json` for automatic checksum validation
+3. **Enter password** (if encrypted) — required for AES-256-GCM decryption
+4. **Reassemble** — sorts parts, verifies checksums, decrypts, decompresses, stitches, and verifies master hash
+5. **Save** — native OS dialog asks where to save the reconstructed file
+
+### Batch Processing
+
+1. **Add files** to the queue
+2. **Choose operation** — Split or Compress
+3. **Set password** (optional) — applied to all splits
+4. **Execute** — directory picker appears once, then all files process sequentially into that folder
+
+---
 
 ## Architecture
 
 ```
-┌─────────────────────────────┐        ┌──────────────────────────────┐
-│   React SPA (src/)          │        │   Express API (server.ts)    │
-│                             │  HTTP   │                              │
-│  splitter.ts    ────────────┼───────►│  POST /api/split             │
-│  reassembler.ts ────────────┼───────►│  POST /api/reassemble        │
-│  compressor.ts              │        │  POST /api/compress          │
-│  crypto.ts      (SHA-256)   │        │  GET  /api/health            │
-│  cloudStorage.ts            │        │                              │
-│                             │        │  fileUtils.ts                │
-│  Web Crypto · Streams       │        │  node:crypto · adm-zip       │
-└─────────────────────────────┘        └──────────────────────────────┘
++-----------------------------------------+        +------------------------------------+
+|  React SPA (Client-Side)                |        |  Express API (Optional Backend)    |
+|                                         |  HTTP  |                                    |
+|  SplitEngineView                        |------->|  POST /api/split                   |
+|  ReassembleView                         |        |  POST /api/reassemble              |
+|  CompressorView                         |        |  POST /api/compress                |
+|  BatchQueueView                         |        |  GET  /api/health                  |
+|  CloudStorageView                       |        |                                    |
+|  IntegrityToolView                      |        |  server/fileUtils.ts               |
+|                                         |        |  node:crypto / adm-zip             |
+|  --- Core Utilities ---                 |        +------------------------------------+
+|  splitter.ts      (split + manifest)    |
+|  reassembler.ts   (verify + stitch)     |
+|  compressor.ts    (image + archive)     |
+|  crypto.ts        (SHA-256 + AES-256)   |
+|  saveHelper.ts    (OS save dialogs)     |
+|  cloudStorage.ts  (provider registry)   |
+|  sound.ts         (Web Audio synth)     |
+|                                         |
+|  Web Crypto API / Compression Streams   |
+|  File System Access API / Canvas API    |
++-----------------------------------------+
 ```
 
-- **Client-first:** splitting, hashing, and reassembly run fully offline in the browser. No file data is transmitted anywhere unless you explicitly call the server API.
-- **Server API (optional):** an Express server mirrors the core operations using `node:crypto` SHA-256 and streams, useful for CI or scripted pipelines. In development it mounts Vite middleware; in production it serves the built `dist/` bundle.
-- **Manifest format:** every split produces a versioned `.fshard.json` manifest recording original name/size/type/MIME, master SHA-256, part count, chunk size, compression flag, and per-part index/name/size/checksum — enough to reconstruct the file exactly.
+### Client-First Design
 
-## Getting Started
+- **Zero data transmission** — splitting, hashing, encryption, and reassembly run entirely in the browser
+- **Memory-safe streaming** — custom pure-JS SHA-256 hasher processes multi-GB files in 8 MB chunks without loading entire files into RAM
+- **AES-256-GCM encryption** — Web Crypto API with PBKDF2 key derivation (100K iterations)
+- **Manifest format** — `.fshard.json` stores original file metadata, checksums, encryption flags, and per-part verification hashes
 
-### Prerequisites
+### Server API (Optional)
 
-- **Node.js** ≥ 18 (or [Bun](https://bun.sh))
-- npm
+The Express backend mirrors core operations as REST endpoints for headless/CI use:
 
-### Installation
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/health` | Server health check |
+| `POST` | `/api/split` | Split file server-side (multipart upload) |
+| `POST` | `/api/compress` | Compress file server-side (ZIP output) |
+| `POST` | `/api/reassemble` | Reassemble parts server-side (checksum verified) |
+
+---
+
+## Project Structure
+
+```
+fileshard/
++-- server.ts                     # Express server + API routes
++-- package.json                  # Dependencies & scripts
++-- tsconfig.json                 # TypeScript configuration
++-- vite.config.ts                # Vite + React + Tailwind
++-- vercel.json                   # Vercel deployment config
++-- src/
+|   +-- main.tsx                  # React entry point
+|   +-- App.tsx                   # Root layout, tab routing, state
+|   +-- types.ts                  # Shared TypeScript interfaces
+|   +-- index.css                 # Tailwind CSS import
+|   +-- components/
+|   |   +-- Sidebar.tsx           # Left navigation
+|   |   +-- Header.tsx            # Top header bar
+|   |   +-- DashboardView.tsx     # System metrics & live logs
+|   |   +-- SplitEngineView.tsx   # WinRAR split engine UI
+|   |   +-- ReassembleView.tsx    # Volume reassembly UI
+|   |   +-- CompressorView.tsx    # Image/file compression UI
+|   |   +-- BatchQueueView.tsx    # Batch queue manager UI
+|   |   +-- CloudStorageView.tsx  # Cloud backup management UI
+|   |   +-- IntegrityToolView.tsx # Checksum verifier UI
+|   |   +-- AuditLogModal.tsx     # Full-screen log modal
+|   |   +-- LiveAuditLogs.tsx     # Terminal-style log viewer
+|   +-- utils/
+|   |   +-- splitter.ts           # Client-side fragmentation + manifest
+|   |   +-- reassembler.ts        # Checksum-verified reconstruction
+|   |   +-- compressor.ts         # Image/archive compression pipeline
+|   |   +-- crypto.ts             # SHA-256, AES-256-GCM, formatting
+|   |   +-- saveHelper.ts         # File System Access API dialogs
+|   |   +-- cloudStorage.ts       # Provider config + backup registry
+|   |   +-- sound.ts              # Web Audio notification synthesizer
+|   +-- server/
+|       +-- fileUtils.ts          # Node.js split/reassemble/checksum
++-- dist/                         # Production build output
++-- uploads/                      # Server-side upload workspace
+```
+
+---
+
+## Available Scripts
+
+| Script | Command | Description |
+|--------|---------|-------------|
+| `dev` | `tsx server.ts` | Start dev server with API + Vite HMR |
+| `build` | `vite build && esbuild ...` | Build client + bundle server to `dist/server.cjs` |
+| `start` | `node dist/server.cjs` | Run production server on port 3000 |
+| `lint` | `tsc --noEmit` | Type-check without emitting |
+| `clean` | `rm -rf dist server.js` | Remove build artifacts |
+
+---
+
+## Manifest Format (.fshard.json)
+
+Every split operation produces a versioned manifest containing everything needed for reconstruction:
+
+```json
+{
+  "manifestVersion": "1.0.0",
+  "fileId": "a1b2c3d4-...",
+  "originalName": "video_file.mp4",
+  "originalSize": 4294967296,
+  "originalType": "video/mp4",
+  "originalChecksum": "e3b0c44298fc1c14...",
+  "totalParts": 4,
+  "partSize": 1073741824,
+  "compressed": true,
+  "compressionType": "gzip",
+  "encrypted": true,
+  "encryptionAlgorithm": "AES-256-GCM",
+  "archiveFormat": "rar",
+  "archiveComment": "Important backup archive",
+  "createdAt": "2026-08-25T12:00:00.000Z",
+  "parts": [
+    { "index": 1, "name": "video_file.mp4.part1.rar", "size": 1073741824, "checksum": "..." },
+    { "index": 2, "name": "video_file.mp4.part2.rar", "size": 1073741824, "checksum": "..." },
+    { "index": 3, "name": "video_file.mp4.part3.rar", "size": 1073741824, "checksum": "..." },
+    { "index": 4, "name": "video_file.mp4.part4.rar", "size": 1073741824, "checksum": "..." }
+  ]
+}
+```
+
+---
+
+## Encryption Details
+
+FileShard uses the **Web Crypto API** for browser-native AES-256-GCM encryption:
+
+| Parameter | Value |
+|-----------|-------|
+| Algorithm | AES-256-GCM |
+| Key Derivation | PBKDF2-SHA256 |
+| Iterations | 100,000 |
+| Key Length | 256 bits |
+| IV Length | 12 bytes (96 bits) |
+| Salt | Fixed per-installation |
+
+The password is never stored. The encrypted volume includes a 12-byte IV prepended to the ciphertext, allowing deterministic decryption with the same password.
+
+---
+
+## Deployment
+
+### Vercel
+
+A `vercel.json` is included. Deploy the repository directly:
 
 ```bash
-git clone <repo-url>
-cd fileshard
-npm install
+vercel --prod
 ```
 
-### Environment Variables
+### Self-Hosted / Docker
+
+```bash
+npm run build
+npm start
+# Server runs on http://localhost:3000
+```
+
+### Static Export (Client-Only)
+
+```bash
+npm run build
+# Serve the dist/ directory with any static file server
+# API features will be unavailable
+```
+
+---
+
+## Browser Compatibility
+
+| Feature | Chrome | Edge | Firefox | Safari |
+|---------|--------|------|---------|--------|
+| Split / Reassemble | Yes | Yes | Yes | Yes |
+| AES-256 Encryption | Yes | Yes | Yes | Yes |
+| SHA-256 Hashing | Yes | Yes | Yes | Yes |
+| Native Save Dialog | Yes | Yes | No | No |
+| Native Folder Picker | Yes | Yes | No | No |
+
+> **Note:** On browsers without File System Access API support (Safari, Firefox), FileShard automatically falls back to standard browser downloads.
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Version |
+|-------|-----------|---------|
+| Framework | React | 19.0 |
+| Language | TypeScript | 5.8 |
+| Build Tool | Vite | 6.2 |
+| CSS | Tailwind CSS | 4.1 |
+| Backend | Express | 4.21 |
+| Crypto | Web Crypto API + custom SHA-256 | -- |
+| Encryption | AES-256-GCM (PBKDF2) | -- |
+| Compression | Compression Streams API + JSZip | -- |
+| Image Processing | Canvas API | -- |
+| Icons | Lucide React | 0.546 |
+| Animations | canvas-confetti | 1.9 |
+
+---
+
+## Environment Variables
 
 Copy the example and adjust as needed:
 
@@ -70,80 +415,22 @@ cp .env.example .env.local
 ```
 
 | Variable | Required | Description |
-|---|---|---|
-| `GEMINI_API_KEY` | Optional | Only needed if you wire up Gemini AI features. Not used by core file operations. |
-| `APP_URL` | Optional | Public URL of a hosted deployment, used for self-referential links. |
+|----------|----------|-------------|
+| `GEMINI_API_KEY` | Optional | For Gemini AI features (not used by core operations) |
+| `APP_URL` | Optional | Public URL of a hosted deployment |
 
-### Running
-
-```bash
-# Development — Express API on :3000 with Vite HMR middleware
-npm run dev
-
-# Production build (client bundle + bundled server)
-npm run build
-
-# Run the production server on http://localhost:3000
-npm start
-```
-
-## API Reference
-
-Base URL: `http://localhost:3000`
-
-| Method | Endpoint | Body | Response |
-|---|---|---|---|
-| `GET` | `/api/health` | — | `{ "status": "ok" }` |
-| `POST` | `/api/split` | `multipart/form-data`: `file`, `partSize` (bytes) | `{ partPaths: string[], checksums: string[] }` |
-| `POST` | `/api/compress` | `multipart/form-data`: `file` | ZIP archive stream |
-| `POST` | `/api/reassemble` | JSON: `{ partPaths, partChecksums, outputPath }` | `200` on success, `400` if checksum verification fails |
-
-> Server-side splits are written under `uploads/<filename>_parts/`. Parts are sorted numerically and each is re-hashed before reassembly; any mismatch aborts the operation.
-
-## Project Structure
-
-```
-fileshard/
-├── server.ts                  # Express server + API routes
-├── src/
-│   ├── App.tsx                # Root layout, tab routing, stats & log state
-│   ├── types.ts               # Shared domain models (manifest, config, batch…)
-│   ├── components/            # One view component per feature module
-│   ├── utils/
-│   │   ├── splitter.ts        # Client-side fragmentation + manifest generation
-│   │   ├── reassembler.ts     # Checksum-verified reconstruction
-│   │   ├── compressor.ts      # Image/archive compression pipeline
-│   │   ├── crypto.ts          # SHA-256, formatting helpers
-│   │   ├── cloudStorage.ts    # Provider config + backup registry
-│   │   └── sound.ts           # Web Audio notification synthesizer
-│   └── server/
-│       └── fileUtils.ts       # Node-side split/reassemble/checksum helpers
-├── dist/                      # Production build output
-├── uploads/                   # Server-side upload/part workspace
-└── vite.config.ts             # Vite + React + Tailwind configuration
-```
-
-## Available Scripts
-
-| Script | Command | Description |
-|---|---|---|
-| `dev` | `tsx server.ts` | Start dev server with API + Vite middleware |
-| `build` | `vite build && esbuild server.ts …` | Build client bundle and bundle the server to `dist/server.cjs` |
-| `start` | `node dist/server.cjs` | Run the production server |
-| `lint` | `tsc --noEmit` | Type-check without emitting |
-| `clean` | — | Remove build artifacts |
-
-## Deployment
-
-- **Vercel:** a `vercel.json` is included with SPA rewrites — deploy the repository directly and Vercel will detect the Vite framework.
-- **Self-hosted / container:** run `npm run build && npm start`; the Express server serves both the API and the static client from `dist/` on port `3000`.
-
-## Notes & Limitations
-
-- The Cloud Storage module persists backup records locally and simulates upload progress; wire `cloudStorage.ts` to real provider SDKs/credentials for production use.
-- Browser reassembly loads shard blobs into memory; very large reconstructions benefit from higher-memory environments.
-- Minimum shard size is 64 KB to avoid pathological part counts.
+---
 
 ## License
 
-Distributed under the Apache License 2.0 — see the `SPDX-License-Identifier` headers in the source files.
+Distributed under the **Apache License 2.0**. See `SPDX-License-Identifier` headers in source files for details.
+
+---
+
+<div align="center">
+
+**Built with care by [FRAGMENT.IO](https://github.com/yourusername/fileshard)**
+
+*Your files. Your browser. Your control.*
+
+</div>

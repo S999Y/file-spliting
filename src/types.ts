@@ -20,6 +20,10 @@ export interface FileManifest {
   partSize: number;
   compressed: boolean;
   compressionType?: 'gzip' | 'zip' | 'deflate' | 'none';
+  encrypted: boolean;
+  encryptionAlgorithm?: 'AES-256-GCM';
+  archiveFormat?: 'rar' | 'zip' | '7z';
+  archiveComment?: string;
   createdAt: string;
   parts: {
     index: number;
@@ -33,11 +37,15 @@ export interface SplitConfig {
   partSizeBytes: number;
   splitMode: 'size' | 'count';
   targetPartCount: number;
+  namingFormat?: 'winrar' | 'standard' | 'numeric' | 'bin';
   compressParts: boolean;
   compressionLevel: number;
   verifyChecksums: boolean;
   destination: 'local' | 'cloud' | 'both';
   cloudProvider: 's3' | 'r2' | 'vercel' | 'gcs' | 'vault';
+  password?: string;
+  archiveFormat?: 'rar' | 'zip' | '7z';
+  archiveComment?: string;
 }
 
 export interface AuditLog {
@@ -55,6 +63,9 @@ export interface BatchItem {
   status: 'queued' | 'processing' | 'completed' | 'failed' | 'paused';
   progress: number;
   speed: string;
+  password?: string;
+  namingFormat?: SplitConfig['namingFormat'];
+  partSizeBytes?: number;
   result?: {
     partsCount?: number;
     originalSize: number;
@@ -90,6 +101,5 @@ export interface SystemStats {
   totalSavedBytes: number;
   successfulOperations: number;
   failedOperations: number;
-  activeEdgeNode: string;
   checksumVerifications: number;
 }

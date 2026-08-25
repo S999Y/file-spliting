@@ -11,7 +11,9 @@ import {
   Scissors,
   Zap,
   ShieldCheck,
-  Download
+  Download,
+  Lock,
+  Save
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { BatchItem } from '../types';
@@ -19,6 +21,7 @@ import { formatBytes } from '../utils/crypto';
 import { splitFileInBrowser } from '../utils/splitter';
 import { compressGenericFile } from '../utils/compressor';
 import { soundManager } from '../utils/sound';
+import { promptSaveDirectory, writeBlobsToDirectory, fallbackDownloadBlob, isFileSystemAccessSupported } from '../utils/saveHelper';
 
 interface BatchQueueViewProps {
   onLog: (level: 'INFO' | 'SYS' | 'AUTH' | 'CHK' | 'WARN' | 'ERROR' | 'SUCCESS', msg: string) => void;
@@ -31,38 +34,13 @@ export const BatchQueueView: React.FC<BatchQueueViewProps> = ({
   onIncrementStats,
   onSendNotification,
 }) => {
-  const [queue, setQueue] = useState<BatchItem[]>([
-    // Seed example queue items
-    {
-      id: 'batch-1',
-      file: new File([''], 'react_enterprise_build_prod.tar.gz', { type: 'application/gzip' }),
-      operation: 'split',
-      status: 'completed',
-      progress: 100,
-      speed: '124 MB/s',
-      result: {
-        partsCount: 6,
-        originalSize: 629145600, // 600MB
-        outputSize: 629145600,
-      },
-    },
-    {
-      id: 'batch-2',
-      file: new File([''], 'training_dataset_vector_embeddings.bin', { type: 'application/octet-stream' }),
-      operation: 'compress',
-      status: 'completed',
-      progress: 100,
-      speed: '88 MB/s',
-      result: {
-        originalSize: 1073741824, // 1GB
-        outputSize: 429496729,
-        savedPercentage: 60,
-      },
-    },
-  ]);
+  const [queue, setQueue] = useState<BatchItem[]>([]);
 
   const [operationType, setOperationType] = useState<'split' | 'compress' | 'verify'>('split');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [batchPassword, setBatchPassword] = useState<string>('');
+  const [showBatchPassword, setShowBatchPassword] = useState<boolean>(false);
+  const [useBatchDir, setUseBatchDir] = useState<boolean>(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAddFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -89,6 +67,18 @@ export const BatchQueueView: React.FC<BatchQueueViewProps> = ({
     setIsProcessing(true);
     onLog('SYS', `Starting batch execution queue for ${queuedItems.length} items...`);
 
+    // Prompt for save directory ONCE for the entire batch if supported
+    let dirHandle: FileSystemDirectoryHandle | null = null;
+    if (useBatchDir && isFileSystemAccessSupported()) {
+      onLog('INFO', 'Prompting for batch save directory...');
+      dirHandle = await promptSaveDirectory();
+      if (dirHandle) {
+        onLog('SUCCESS', `Batch save directory selected. All results will be saved there.`);
+      } else {
+        onLog('INFO', 'No directory selected. Files will use browser download fallback.');
+      }
+    }
+
     for (const item of queuedItems) {
       // Set to processing
       setQueue(prev =>
@@ -102,21 +92,30 @@ export const BatchQueueView: React.FC<BatchQueueViewProps> = ({
           const splitRes = await splitFileInBrowser(
             item.file,
             {
-              partSizeBytes: 25 * 1024 * 1024,
+              partSizeBytes: item.partSizeBytes || 25 * 1024 * 1024,
               splitMode: 'size',
               targetPartCount: 4,
+              namingFormat: item.namingFormat || 'winrar',
               compressParts: false,
               compressionLevel: 6,
               verifyChecksums: true,
               destination: 'local',
               cloudProvider: 'vault',
+              password: batchPassword || undefined,
             },
             p => {
               setQueue(prev =>
                 prev.map(q => (q.id === item.id ? { ...q, progress: p, speed: '96 MB/s' } : q))
               );
-            }
+            },
+            (level, msg) => onLog(level, msg)
           );
+
+          // Save all parts to directory if available
+          if (dirHandle) {
+            const files = splitRes.parts.filter(p => p.blob).map(p => ({ blob: p.blob!, name: p.name }));
+            await writeBlobsToDirectory(dirHandle, files, true);
+          }
 
           setQueue(prev =>
             prev.map(q =>
@@ -141,6 +140,11 @@ export const BatchQueueView: React.FC<BatchQueueViewProps> = ({
             convertToWebP: true,
             archiveFormat: 'zip',
           });
+
+          // Save to directory if available
+          if (dirHandle) {
+            await writeBlobsToDirectory(dirHandle, [{ blob: compRes.compressedBlob, name: compRes.outputName }], true);
+          }
 
           setQueue(prev =>
             prev.map(q =>
@@ -259,6 +263,44 @@ export const BatchQueueView: React.FC<BatchQueueViewProps> = ({
               Batch Compress
             </button>
           </div>
+        </div>
+
+        {/* Batch Password & Save Options */}
+        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-100">
+          {/* Password */}
+          {operationType === 'split' && (
+            <div className="flex items-center gap-2">
+              <Lock className="w-3.5 h-3.5 text-slate-500" />
+              <input
+                type={showBatchPassword ? 'text' : 'password'}
+                value={batchPassword}
+                onChange={e => setBatchPassword(e.target.value)}
+                placeholder="Archive password (optional)"
+                className="rounded-lg border border-slate-300 p-1.5 text-xs font-mono w-48 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowBatchPassword(!showBatchPassword)}
+                className="text-slate-400 hover:text-slate-600 text-xs"
+              >
+                {showBatchPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+          )}
+
+          {/* Directory Picker Toggle */}
+          {isFileSystemAccessSupported() && (
+            <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-600">
+              <input
+                type="checkbox"
+                checked={useBatchDir}
+                onChange={e => setUseBatchDir(e.target.checked)}
+                className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+              />
+              <Save className="w-3.5 h-3.5 text-slate-500" />
+              <span>Save all results to one folder (asked once)</span>
+            </label>
+          )}
         </div>
       </div>
 

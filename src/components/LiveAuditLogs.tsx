@@ -131,32 +131,6 @@ export const LiveAuditLogs: React.FC<LiveAuditLogsProps> = ({ logs, onClearLogs 
             </div>
           ))
         )}
-        <div className="text-blue-500/80 animate-pulse pt-2 select-none flex items-center gap-1 text-[10px]">
-          <span>⚡</span>
-          <span>Vercel Edge worker active — awaiting stream buffer...</span>
-        </div>
-      </div>
-
-      {/* Integrations Status Bar */}
-      <div className="p-3 bg-slate-900/70 border-t border-slate-800/80 text-[11px]">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
-            Integrity Subsystem
-          </span>
-          <span className="text-[10px] text-emerald-400 font-mono font-semibold">
-            Status: Nominal (SHA-256)
-          </span>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="bg-slate-800/90 p-1.5 px-2.5 rounded text-[10px] text-slate-300 flex items-center gap-2 border border-slate-700/40">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
-            <span>Vercel Edge Node</span>
-          </div>
-          <div className="bg-slate-800/90 p-1.5 px-2.5 rounded text-[10px] text-slate-300 flex items-center gap-2 border border-slate-700/40">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
-            <span>Bitwise Checksum Engine</span>
-          </div>
-        </div>
       </div>
     </div>
   );

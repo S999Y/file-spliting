@@ -15,10 +15,10 @@ export interface CloudConfig {
 
 export const defaultCloudConfig: CloudConfig = {
   provider: 'vault',
-  bucketName: 'fragment-io-edge-vault',
-  region: 'us-east-1 (Northern-VA)',
-  endpointUrl: 'https://vault.fragment.io/api/v1/shards',
-  accessKeyId: 'fshard_live_edge_key',
+  bucketName: '',
+  region: 'us-east-1',
+  endpointUrl: '',
+  accessKeyId: '',
   autoSync: true,
 };
 
@@ -49,52 +49,7 @@ export function getStoredBackups(): CloudBackupItem[] {
   } catch {
     // Ignore parse error
   }
-
-  // Pre-seeded example cloud backup for instant rich demonstration
-  const seed: CloudBackupItem[] = [
-    {
-      id: 'backup-enterprise-9921',
-      originalName: 'enterprise_video_bundle_v14.raw',
-      fileId: 'fshard-ent-9102-v14',
-      totalParts: 4,
-      totalSize: 4294967296, // 4GB
-      provider: 'AWS S3 (Standard IA)',
-      region: 'us-east-1 (N. Virginia)',
-      checksum: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-      uploadedAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-      parts: [
-        {
-          index: 1,
-          name: 'enterprise_video_bundle_v14.raw.part001',
-          size: 1073741824,
-          checksum: '8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4',
-          cloudUrl: 'https://s3.us-east-1.amazonaws.com/fragment-vault/part001.bin',
-        },
-        {
-          index: 2,
-          name: 'enterprise_video_bundle_v14.raw.part002',
-          size: 1073741824,
-          checksum: '6ca13d52ca70c883e0f0bb101e425a89e8624de51db2d2392593af6a84118090',
-          cloudUrl: 'https://s3.us-east-1.amazonaws.com/fragment-vault/part002.bin',
-        },
-        {
-          index: 3,
-          name: 'enterprise_video_bundle_v14.raw.part003',
-          size: 1073741824,
-          checksum: '51965e630fd86392095f9c4701e67ee83a54b38740c06a01dd1472be964893be',
-          cloudUrl: 'https://s3.us-east-1.amazonaws.com/fragment-vault/part003.bin',
-        },
-        {
-          index: 4,
-          name: 'enterprise_video_bundle_v14.raw.part004',
-          size: 1073741824,
-          checksum: 'a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e',
-          cloudUrl: 'https://s3.us-east-1.amazonaws.com/fragment-vault/part004.bin',
-        },
-      ],
-    },
-  ];
-  return seed;
+  return [];
 }
 
 export function saveStoredBackups(backups: CloudBackupItem[]): void {

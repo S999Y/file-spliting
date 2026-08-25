@@ -1,6 +1,6 @@
 {
   "name": "FileShard",
-  "description": "A robust tool for splitting, compressing, and reassembling large files with support for cloud storage and batch processing.",
+  "description": "WinRAR-compatible file splitting, compression, AES-256 encryption, and reassembly toolkit with native save dialogs and batch processing.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

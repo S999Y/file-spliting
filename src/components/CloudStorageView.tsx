@@ -87,21 +87,23 @@ export const CloudStorageView: React.FC<CloudStorageViewProps> = ({
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Connected Provider</span>
-            <Server className="w-4 h-4 text-emerald-600" />
+            <Server className="w-4 h-4 text-blue-600" />
           </div>
           <h3 className="text-lg font-bold text-slate-900 capitalize font-mono">
-            {config.provider.toUpperCase()} Edge
+            {config.provider.toUpperCase()}
           </h3>
-          <p className="text-xs text-emerald-600 font-semibold mt-1">Status: Active & Synchronized</p>
+          <p className="text-xs text-slate-500 mt-1">{config.region}</p>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Edge Redundancy</span>
-            <Database className="w-4 h-4 text-purple-600" />
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Bucket</span>
+            <Database className="w-4 h-4 text-indigo-600" />
           </div>
-          <h3 className="text-lg font-bold text-slate-900 font-mono">Multi-Region</h3>
-          <p className="text-xs text-slate-500 mt-1">{config.region}</p>
+          <h3 className="text-lg font-bold text-slate-900 font-mono">
+            {config.bucketName || 'Not configured'}
+          </h3>
+          <p className="text-xs text-slate-500 mt-1">Auto-sync {config.autoSync ? 'on' : 'off'}</p>
         </div>
       </div>
 
