@@ -7,6 +7,7 @@ Everything you need to know to use FileShard for splitting, reassembling, compre
 ## Table of Contents
 
 - [Can FileShard Handle Any File?](#can-fileshard-handle-any-file)
+- [Responsive Design](#responsive-design)
 - [Splitting Files](#splitting-files)
 - [Reassembling Files](#reassembling-files)
 - [Checksums & Verification](#checksums--verification)
@@ -14,7 +15,9 @@ Everything you need to know to use FileShard for splitting, reassembling, compre
 - [Compression](#compression)
 - [Batch Processing](#batch-processing)
 - [Cloud Storage](#cloud-storage)
-- [Integrity Tool (Standalone Checksum)](#integrity-tool-standalone-checksum)
+- [Integrity Tool (Standalone + Batch Checksum)](#integrity-tool-standalone--batch-checksum)
+- [Dashboard & Activity](#dashboard--activity)
+- [Device-Scoped Storage](#device-scoped-storage)
 - [Audit Logs](#audit-logs)
 - [Save Location Behavior](#save-location-behavior)
 - [Browser Compatibility](#browser-compatibility)
@@ -44,11 +47,34 @@ Everything you need to know to use FileShard for splitting, reassembling, compre
 
 ---
 
+## Responsive Design
+
+FileShard is fully responsive and works on any screen size:
+
+### Mobile (< 768px)
+- **Collapsible sidebar** — tap the hamburger menu icon (three lines) in the header to open/close the navigation
+- **Stacked layouts** — all config panels, cards, and forms stack vertically
+- **Touch-friendly buttons** — larger tap targets, smaller text to fit on screen
+- **Hidden columns** — tables hide less important columns (hashes, providers) and scroll horizontally
+- **Compact padding** — tighter spacing to maximize usable space
+
+### Tablet (768px — 1024px)
+- **Two-column grids** — config panels side by side, stat cards in 2-column grid
+- **Partial columns** — tables show some hidden columns, truncate long text
+- **Sidebar** — always visible on tablet and desktop
+
+### Desktop (> 1024px)
+- **Full sidebar** — always visible, fixed navigation
+- **Multi-column layouts** — stat cards in 4-column grid, full config panels
+- **Complete tables** — all columns visible including hashes, providers, and status details
+
+---
+
 ## Splitting Files
 
 ### Step 1 — Select a File
 
-1. Go to **Split Engine** in the sidebar
+1. Go to **Split Engine** in the sidebar (or tap the hamburger menu on mobile)
 2. **Click** the upload zone or **drag & drop** your file
 3. FileShard shows the file name, size, and detects if it's a large file (2 GB+)
 
@@ -62,13 +88,13 @@ Everything you need to know to use FileShard for splitting, reassembling, compre
 **Naming Format** (right panel):
 | Format | Part Name Example | Best For |
 |--------|------------------|----------|
-| WinRAR Archive | `video.mp4.part1.rar` | WinRAR/7-Zip compatibility |
-| Multi-Part Volume | `video.mp4.part001` | General use |
+| WinRAR | `video.mp4.part1.rar` | WinRAR/7-Zip compatibility |
+| Multi-Part | `video.mp4.part001` | General use |
 | 7-Zip Numeric | `video.mp4.001` | 7-Zip compatibility |
 | Binary Shard | `video.mp4.part1.bin` | Raw binary storage |
 
 **Optional Settings:**
-- **Compression** — GZIP lossless compression per volume (adds processing time, reduces size)
+- **Compression** — GZIP lossless compression per volume
 - **Password** — AES-256-GCM encryption (see [Password Protection](#password-protection-encryption))
 - **Archive Format** — RAR, ZIP, or 7Z (metadata only, for manifest)
 - **Archive Comment** — Add a text comment stored in the manifest
@@ -90,6 +116,7 @@ After splitting, you have multiple download options:
 | **Windows (.bat)** | Downloads a 1-click reassembly script for Windows |
 | **Unix/Mac (.sh)** | Downloads a 1-click reassembly script for Mac/Linux |
 | **Manifest (.fshard.json)** | Downloads the checksum manifest file |
+| **Checksums (.txt/.csv/.json)** | Downloads a checksums file for batch verification (direct browser download, no save dialog) |
 | **Download** (per-part) | Opens a save dialog **each time** for that specific part |
 
 ### What Gets Saved
@@ -102,6 +129,7 @@ video.mp4.part2.rar
 video.mp4.part3.rar
 video.mp4.part4.rar
 video.mp4.fshard.json    (manifest with checksums)
+video.mp4.checksums.txt  (standalone checksums file, optional)
 extract_video.mp4.bat    (optional, if you downloaded it)
 extract_video.mp4.sh     (optional, if you downloaded it)
 ```
@@ -144,7 +172,7 @@ If the archive was split with a password:
 
 ### Step 5 — Reassemble & Verify
 
-1. Click **"Reassemble & Verify Integrity"**
+1. Click **"Reassemble & Verify"**
 2. FileShard processes each part:
    - Validates SHA-256 checksum against manifest (if available)
    - Decrypts AES-256-GCM (if password-protected)
@@ -155,7 +183,7 @@ If the archive was split with a password:
 
 ### Step 6 — Download
 
-Click **"Download Reconstituted File"** to save the reassembled file with its original name and extension.
+Click **"Download File"** to save the reassembled file with its original name and extension.
 
 ---
 
@@ -209,12 +237,12 @@ Compare the output hash with the one in your `.fshard.json` manifest under `orig
 
 ```json
 {
-  "originalChecksum": "e3b0c44298fc1c14...",   // Master hash of original file
+  "originalChecksum": "e3b0c44298fc1c14...",
   "parts": [
     {
       "index": 1,
       "name": "video.mp4.part1.rar",
-      "checksum": "8f434346648f6b96..."         // Hash of this specific part
+      "checksum": "8f434346648f6b96..."
     }
   ]
 }
@@ -280,7 +308,7 @@ The **Compressor** reduces file sizes using lossless and lossy algorithms.
 ### Image Compression
 
 - Converts images to **WebP** format (optional, on by default)
-- Quality slider: 0.1 (smallest) to 1.0 (highest quality)
+- Quality slider: 40% (smallest) to 95% (highest quality)
 - Max dimension resizing for large images
 
 ### Generic File Compression
@@ -293,7 +321,7 @@ The **Compressor** reduces file sizes using lossless and lossy algorithms.
 1. Select multiple files in the Compressor
 2. Configure compression settings
 3. Click Compress — all files are processed
-4. Click **"Save All to Folder"** to pick one directory for all results
+4. Click **"Save All"** to pick one directory for all results
 
 ---
 
@@ -304,8 +332,8 @@ Queue multiple files for sequential processing with a shared save destination.
 ### Step 1 — Add Files
 
 1. Go to **Batch Queue** in the sidebar
-2. Select operation type: **Batch Split** or **Batch Compress**
-3. Click **"Add Archives to Queue"** and select your files
+2. Select operation type: **Split** or **Compress**
+3. Click **"Add Files"** and select your files
 
 ### Step 2 — Configure
 
@@ -314,17 +342,17 @@ Queue multiple files for sequential processing with a shared save destination.
 
 ### Step 3 — Execute
 
-1. Click **"Execute Queue"**
+1. Click **"Execute"**
 2. If "Save all results to one folder" is on, a directory picker appears **once**
 3. All files process sequentially with live progress per item
-4. Status tracking: QUEUED → RUNNING → COMPLETED / FAILED
+4. Status tracking: QUEUE → RUN → DONE / FAIL
 
 ### Step 4 — Review
 
 - Completed items show green checkmarks
 - Failed items show red errors with details
 - Click the trash icon to remove individual items
-- Click "Clear completed" to remove finished items from the queue
+- Click the trash button in the header to clear completed items
 
 ---
 
@@ -343,8 +371,8 @@ Register shard backups against configurable cloud providers.
 ### How It Works
 
 1. Go to **Cloud Storage** in the sidebar
-2. Configure your provider settings (bucket name, region, endpoint, access key)
-3. Click **Save Cloud Settings**
+2. Configure your provider settings (bucket name, region)
+3. Click **Save Settings**
 4. When splitting a file, choose destination: **Local**, **Cloud**, or **Both**
 5. Cloud-synced backups appear in the table with restore options
 
@@ -356,21 +384,119 @@ Register shard backups against configurable cloud providers.
 
 ---
 
-## Integrity Tool (Standalone Checksum)
+## Integrity Tool (Standalone + Batch Checksum)
 
-Verify any file's SHA-256 checksum without splitting or reassembling.
+Verify file integrity against SHA-256 hashes. Two modes available.
+
+### Single File Mode
 
 1. Go to **Checksum Verifier** in the sidebar
 2. Drop or select any file
 3. The SHA-256 hash is computed automatically (even for multi-GB files)
 4. Paste an expected hash to compare — green match or red mismatch
-5. Click the hash to copy it to your clipboard
+5. Click "Copy" to copy the hash to your clipboard
+
+### Batch Verify Mode
+
+1. Click the **"Batch"** toggle in the mode selector
+2. **Step 1:** Upload a checksums file (`.txt`, `.csv`, or `.json`) exported from FileShard's split engine
+   - The file is parsed and all expected hashes are loaded
+   - A preview shows the loaded entries
+3. **Step 2:** Upload all the part files you want to verify
+   - Each file is checked against the checksums file
+   - Green dot = found in checksums file, amber dot = no expected hash
+4. Click **"Verify All"** to start
+   - FileShard computes SHA-256 for every file and compares against expected hashes
+   - Results table shows: status icon, file name, size, calculated hash, expected hash
+   - Matched/Mismatched counter at top
+5. Click **"Verify Again"** to retry
+
+### Checksums File Formats
+
+FileShard can parse any of these formats:
+
+**Plain text (.txt):**
+```
+video.mp4.part1.rar:8f434346648f6b96c88b...
+video.mp4.part2.rar:a3f2b8c1d4e5f6a7b8c9...
+```
+
+**CSV (.csv):**
+```
+Filename,SHA-256
+video.mp4.part1.rar,8f434346648f6b96c88b...
+video.mp4.part2.rar,a3f2b8c1d4e5f6a7b8c9...
+```
+
+**JSON (.json):**
+```json
+{
+  "video.mp4.part1.rar": "8f434346648f6b96c88b...",
+  "video.mp4.part2.rar": "a3f2b8c1d4e5f6a7b8c9..."
+}
+```
 
 ### Use Cases
 
 - Verify a downloaded file matches its published checksum
 - Confirm a reassembled file is identical to the original
 - Check file integrity before and after transfer
+- Batch-verify all parts of a split archive against exported checksums
+
+---
+
+## Dashboard & Activity
+
+The Dashboard shows system-wide statistics and recent activity.
+
+### Stat Cards
+
+| Card | Shows |
+|------|-------|
+| **Total Processed** | Lifetime bytes processed through all operations |
+| **Bandwidth Saved** | Estimated bytes saved via compression |
+| **Operations** | Total successful (and failed) operations |
+| **Integrity Checks** | Total SHA-256 verifications performed |
+
+### Quick Actions
+
+Four buttons to navigate directly to Split, Reassemble, Compress, or Batch tools.
+
+### Recent Activity
+
+A feed of the last 10 operations with:
+- Operation type icon (split, reassemble, compress, batch)
+- File name and size
+- Success/failure status
+- Timestamp
+- **Delete** button (trash icon on hover) to remove individual entries
+- **Clear All** button to wipe all activity
+
+---
+
+## Device-Scoped Storage
+
+FileShard isolates data per browser and device:
+
+### How It Works
+
+- On first visit, a unique **device ID** is generated and stored in your browser
+- A human-readable **device label** is shown (e.g., "Chrome on Windows", "Safari on macOS")
+- All localStorage keys are prefixed with this device ID
+- Different browsers or devices on the same machine see completely separate data
+
+### What's Scoped
+
+- System statistics (total processed, saved, operations)
+- Audit logs
+- Recent activity history
+- Cloud storage configuration and backups
+
+### Managing Data
+
+- **Export Data** (sidebar footer) — downloads all data as a `.json` file
+- **Clear All Data** (sidebar footer trash icon) — deletes all data for the current device with confirmation
+- **Delete Entry** (dashboard) — removes individual history entries
 
 ---
 
@@ -411,6 +537,7 @@ FileShard uses smart save dialogs to minimize interruptions:
 | **Download All Volumes** | Directory picker **once**, all parts saved there |
 | **Per-part Download** | Save dialog **each time** (for individual part downloads) |
 | **Download as ZIP** | Single-file save dialog |
+| **Checksums Download** | Direct browser download (no save dialog) |
 | **Reassemble — Extract Here** | Single-file save dialog |
 | **Reassemble — Extract to Folder** | Directory picker, file saved there |
 | **Batch Queue** | Directory picker **once** before queue starts |
@@ -429,6 +556,7 @@ FileShard uses smart save dialogs to minimize interruptions:
 | SHA-256 Hashing | Yes | Yes | Yes | Yes |
 | Native Save Dialog | Yes | Yes | No | No |
 | Native Folder Picker | Yes | Yes | No | No |
+| Responsive Layout | Yes | Yes | Yes | Yes |
 
 **Recommendation:** Use Chrome or Edge for the best experience (native OS save dialogs). Firefox and Safari work fully but use browser downloads instead.
 
@@ -476,3 +604,15 @@ FileShard uses smart save dialogs to minimize interruptions:
 - File System Access API is only supported in Chromium browsers (Chrome, Edge, Opera)
 - FileShard automatically falls back to browser downloads on unsupported browsers
 - All functionality works — only the save dialog style differs
+
+### Sidebar won't open on mobile
+
+- Tap the hamburger menu icon (three horizontal lines) in the top-left of the header
+- Tap outside the sidebar or the X button to close it
+- Navigating to a different tab auto-closes the sidebar
+
+### Different browsers show different data
+
+- This is by design — FileShard scopes all data per browser/device
+- Each browser gets its own unique device ID on first visit
+- Use "Export Data" to back up data from one browser, then import on another
