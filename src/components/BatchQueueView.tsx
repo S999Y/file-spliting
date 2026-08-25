@@ -22,16 +22,19 @@ import { splitFileInBrowser } from '../utils/splitter';
 import { compressGenericFile } from '../utils/compressor';
 import { soundManager } from '../utils/sound';
 import { promptSaveDirectory, writeBlobsToDirectory, fallbackDownloadBlob, isFileSystemAccessSupported } from '../utils/saveHelper';
+import { HistoryEntry } from '../utils/dataStorage';
 
 interface BatchQueueViewProps {
   onLog: (level: 'INFO' | 'SYS' | 'AUTH' | 'CHK' | 'WARN' | 'ERROR' | 'SUCCESS', msg: string) => void;
   onIncrementStats: (processedBytes: number, isSuccess: boolean) => void;
+  onAddHistory: (entry: Omit<HistoryEntry, 'id' | 'timestamp'>) => void;
   onSendNotification: (title: string, msg: string) => void;
 }
 
 export const BatchQueueView: React.FC<BatchQueueViewProps> = ({
   onLog,
   onIncrementStats,
+  onAddHistory,
   onSendNotification,
 }) => {
   const [queue, setQueue] = useState<BatchItem[]>([]);
@@ -165,6 +168,14 @@ export const BatchQueueView: React.FC<BatchQueueViewProps> = ({
         }
 
         onIncrementStats(item.file.size || 50 * 1024 * 1024, true);
+        onAddHistory({
+          type: item.operation === 'split' ? 'split' : 'compress',
+          fileName: item.file.name,
+          originalSize: item.file.size || 50 * 1024 * 1024,
+          outputSize: item.result?.outputSize,
+          partsCount: item.result?.partsCount,
+          success: true,
+        });
         onLog('SUCCESS', `Completed batch item: ${item.file.name}`);
       } catch (err) {
         setQueue(prev =>

@@ -17,16 +17,19 @@ import { formatBytes } from '../utils/crypto';
 import { compressGenericFile, CompressedAssetResult, CompressionOptions } from '../utils/compressor';
 import { soundManager } from '../utils/sound';
 import { fallbackDownloadBlob, promptSaveDirectory, writeBlobsToDirectory } from '../utils/saveHelper';
+import { HistoryEntry } from '../utils/dataStorage';
 
 interface CompressorViewProps {
   onLog: (level: 'INFO' | 'SYS' | 'AUTH' | 'CHK' | 'WARN' | 'ERROR' | 'SUCCESS', msg: string) => void;
   onIncrementStats: (processedBytes: number, isSuccess: boolean) => void;
+  onAddHistory: (entry: Omit<HistoryEntry, 'id' | 'timestamp'>) => void;
   onSendNotification: (title: string, msg: string) => void;
 }
 
 export const CompressorView: React.FC<CompressorViewProps> = ({
   onLog,
   onIncrementStats,
+  onAddHistory,
   onSendNotification,
 }) => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -86,6 +89,13 @@ export const CompressorView: React.FC<CompressorViewProps> = ({
       const totalOrig = outResults.reduce((a, b) => a + b.originalSize, 0);
       const totalComp = outResults.reduce((a, b) => a + b.compressedSize, 0);
       onIncrementStats(totalOrig, true);
+      onAddHistory({
+        type: 'compress',
+        fileName: selectedFiles.map(f => f.name).join(', '),
+        originalSize: totalOrig,
+        outputSize: totalComp,
+        success: true,
+      });
       soundManager.playSuccess();
       confetti({ particleCount: 50, spread: 45, origin: { y: 0.8 } });
 

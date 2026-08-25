@@ -13,15 +13,18 @@ import {
 import confetti from 'canvas-confetti';
 import { calculateSHA256, formatBytes } from '../utils/crypto';
 import { soundManager } from '../utils/sound';
+import { HistoryEntry } from '../utils/dataStorage';
 
 interface IntegrityToolViewProps {
   onLog: (level: 'INFO' | 'SYS' | 'AUTH' | 'CHK' | 'WARN' | 'ERROR' | 'SUCCESS', msg: string) => void;
   onIncrementStats: (processedBytes: number, isSuccess: boolean) => void;
+  onAddHistory?: (entry: Omit<HistoryEntry, 'id' | 'timestamp'>) => void;
 }
 
 export const IntegrityToolView: React.FC<IntegrityToolViewProps> = ({
   onLog,
   onIncrementStats,
+  onAddHistory,
 }) => {
   const [file, setFile] = useState<File | null>(null);
   const [calculatedHash, setCalculatedHash] = useState<string | null>(null);

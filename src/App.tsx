@@ -11,7 +11,7 @@ import { IntegrityToolView } from './components/IntegrityToolView';
 import { AuditLogModal } from './components/AuditLogModal';
 import { SystemStats, AuditLog } from './types';
 import { soundManager } from './utils/sound';
-import { loadStats, saveStats, loadLogs, saveLogs } from './utils/dataStorage';
+import { loadStats, saveStats, loadLogs, saveLogs, saveHistoryEntry, HistoryEntry } from './utils/dataStorage';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -48,6 +48,14 @@ export default function App() {
       failedOperations: isSuccess ? prev.failedOperations : prev.failedOperations + 1,
       checksumVerifications: prev.checksumVerifications + 1,
     }));
+  };
+
+  const handleAddHistory = (entry: Omit<HistoryEntry, 'id' | 'timestamp'>) => {
+    saveHistoryEntry({
+      ...entry,
+      id: 'hist-' + Math.random().toString(36).substring(2, 9),
+      timestamp: new Date().toISOString(),
+    });
   };
 
   const handleSendNotification = (title: string, msg: string) => {
@@ -87,6 +95,7 @@ export default function App() {
               <SplitEngineView
                 onLog={addLog}
                 onIncrementStats={handleIncrementStats}
+                onAddHistory={handleAddHistory}
                 onSendNotification={handleSendNotification}
               />
             )}
@@ -95,6 +104,7 @@ export default function App() {
               <ReassembleView
                 onLog={addLog}
                 onIncrementStats={handleIncrementStats}
+                onAddHistory={handleAddHistory}
                 onSendNotification={handleSendNotification}
               />
             )}
@@ -103,6 +113,7 @@ export default function App() {
               <CompressorView
                 onLog={addLog}
                 onIncrementStats={handleIncrementStats}
+                onAddHistory={handleAddHistory}
                 onSendNotification={handleSendNotification}
               />
             )}
@@ -111,6 +122,7 @@ export default function App() {
               <BatchQueueView
                 onLog={addLog}
                 onIncrementStats={handleIncrementStats}
+                onAddHistory={handleAddHistory}
                 onSendNotification={handleSendNotification}
               />
             )}
@@ -127,6 +139,7 @@ export default function App() {
               <IntegrityToolView
                 onLog={addLog}
                 onIncrementStats={handleIncrementStats}
+                onAddHistory={handleAddHistory}
               />
             )}
           </div>

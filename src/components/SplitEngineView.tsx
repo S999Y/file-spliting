@@ -29,16 +29,19 @@ import { splitFileInBrowser, createBundleZip, SplitResult, generateExtractionScr
 import { uploadShardBackupToCloud, getCloudConfig } from '../utils/cloudStorage';
 import { soundManager } from '../utils/sound';
 import { promptSaveLocation, writeBlobToStream, promptSaveDirectory, writeBlobsToDirectory, fallbackDownloadBlob } from '../utils/saveHelper';
+import { HistoryEntry } from '../utils/dataStorage';
 
 interface SplitEngineViewProps {
   onLog: (level: 'INFO' | 'SYS' | 'AUTH' | 'CHK' | 'WARN' | 'ERROR' | 'SUCCESS', msg: string) => void;
   onIncrementStats: (processedBytes: number, isSuccess: boolean) => void;
+  onAddHistory: (entry: Omit<HistoryEntry, 'id' | 'timestamp'>) => void;
   onSendNotification: (title: string, msg: string) => void;
 }
 
 export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
   onLog,
   onIncrementStats,
+  onAddHistory,
   onSendNotification,
 }) => {
   const [file, setFile] = useState<File | null>(null);
@@ -71,6 +74,7 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
   const [isBatchDownloading, setIsBatchDownloading] = useState<boolean>(false);
   const [savedDirHandle, setSavedDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
+  const [checksumFormat, setChecksumFormat] = useState<'txt' | 'csv' | 'json'>('txt');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -163,6 +167,14 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
 
       setResult(splitRes);
       onIncrementStats(file.size, true);
+      onAddHistory({
+        type: 'split',
+        fileName: file.name,
+        originalSize: file.size,
+        outputSize: splitRes.totalSize,
+        partsCount: splitRes.parts.length,
+        success: true,
+      });
       soundManager.playSuccess();
       confetti({ particleCount: 60, spread: 50, origin: { y: 0.8 } });
 
@@ -241,6 +253,41 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
     } else {
       fallbackDownloadBlob(blob, fileName);
       onLog('INFO', `Exported shard manifest: ${fileName}`);
+    }
+  };
+
+  const handleDownloadChecksums = async () => {
+    if (!result) return;
+    const lines = result.parts.map(p => `${p.name}:${p.checksum}`);
+
+    let content: string;
+    let mimeType: string;
+    let ext: string;
+
+    if (checksumFormat === 'csv') {
+      content = 'Filename,SHA-256\n' + result.parts.map(p => `${p.name},${p.checksum}`).join('\n');
+      mimeType = 'text/csv';
+      ext = 'csv';
+    } else if (checksumFormat === 'json') {
+      const obj = Object.fromEntries(result.parts.map(p => [p.name, p.checksum]));
+      content = JSON.stringify(obj, null, 2);
+      mimeType = 'application/json';
+      ext = 'json';
+    } else {
+      content = lines.join('\n');
+      mimeType = 'text/plain';
+      ext = 'txt';
+    }
+
+    const blob = new Blob([content], { type: mimeType });
+    const fileName = `${result.manifest.originalName}.checksums.${ext}`;
+    const dirHandle = await getOrPromptDirectory();
+    if (dirHandle) {
+      await writeBlobsToDirectory(dirHandle, [{ blob, name: fileName }], false);
+      onLog('SUCCESS', `Saved checksums to directory: ${fileName}`);
+    } else {
+      fallbackDownloadBlob(blob, fileName);
+      onLog('INFO', `Exported checksums: ${fileName}`);
     }
   };
 
@@ -729,6 +776,26 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
                 <FileCode className="w-3.5 h-3.5 text-slate-600" />
                 <span>Manifest (.fshard.json)</span>
               </button>
+
+              {/* Checksums Download */}
+              <div className="flex items-center gap-0 border border-slate-200 rounded-lg overflow-hidden">
+                <button
+                  onClick={handleDownloadChecksums}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Checksums</span>
+                </button>
+                <select
+                  value={checksumFormat}
+                  onChange={e => setChecksumFormat(e.target.value as 'txt' | 'csv' | 'json')}
+                  className="px-1.5 py-2 text-[10px] font-bold text-slate-600 bg-slate-50 border-l border-slate-200 cursor-pointer focus:outline-none"
+                >
+                  <option value="txt">.txt</option>
+                  <option value="csv">.csv</option>
+                  <option value="json">.json</option>
+                </select>
+              </div>
             </div>
           </div>
 

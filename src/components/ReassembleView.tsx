@@ -24,16 +24,19 @@ import { reassembleFileFromParts, PartInput, ReassemblyResult } from '../utils/r
 import { getStoredBackups } from '../utils/cloudStorage';
 import { soundManager } from '../utils/sound';
 import { promptSaveLocation, writeBlobToStream, fallbackDownloadBlob, promptSaveDirectory, writeBlobsToDirectory } from '../utils/saveHelper';
+import { HistoryEntry } from '../utils/dataStorage';
 
 interface ReassembleViewProps {
   onLog: (level: 'INFO' | 'SYS' | 'AUTH' | 'CHK' | 'WARN' | 'ERROR' | 'SUCCESS', msg: string) => void;
   onIncrementStats: (processedBytes: number, isSuccess: boolean) => void;
+  onAddHistory: (entry: Omit<HistoryEntry, 'id' | 'timestamp'>) => void;
   onSendNotification: (title: string, msg: string) => void;
 }
 
 export const ReassembleView: React.FC<ReassembleViewProps> = ({
   onLog,
   onIncrementStats,
+  onAddHistory,
   onSendNotification,
 }) => {
   const [uploadedParts, setUploadedParts] = useState<PartInput[]>([]);
@@ -141,6 +144,14 @@ export const ReassembleView: React.FC<ReassembleViewProps> = ({
 
       setResult(res);
       onIncrementStats(res.reassembledSize, true);
+      onAddHistory({
+        type: 'reassemble',
+        fileName: res.fileName,
+        originalSize: res.originalSize,
+        outputSize: res.reassembledSize,
+        partsCount: res.totalPartsCount,
+        success: true,
+      });
       soundManager.playSuccess();
       confetti({ particleCount: 70, spread: 60, origin: { y: 0.8 } });
 
