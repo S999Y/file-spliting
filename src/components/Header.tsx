@@ -1,17 +1,19 @@
 import React from 'react';
-import { Bell, Terminal } from 'lucide-react';
+import { Bell, Terminal, Menu } from 'lucide-react';
 import { soundManager } from '../utils/sound';
 
 interface HeaderProps {
   activeTab: string;
   onOpenLogs?: () => void;
   logsCount: number;
+  onToggleSidebar?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   activeTab,
   onOpenLogs,
   logsCount,
+  onToggleSidebar,
 }) => {
   const getTabLabel = (id: string) => {
     switch (id) {
@@ -38,21 +40,29 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0 z-10">
+    <header className="h-14 md:h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 shrink-0 z-10">
       <div className="flex items-center gap-2.5 text-sm text-slate-500 font-medium">
+        {onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            className="md:hidden p-1.5 -ml-1 text-slate-600 hover:bg-slate-100 rounded-lg transition"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
         <span className="text-slate-900 font-bold">FileShard</span>
         <span className="text-slate-300">/</span>
         <span className="text-slate-900 font-semibold">{getTabLabel(activeTab)}</span>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 md:gap-4">
         {onOpenLogs && (
           <button
             onClick={onOpenLogs}
-            className="flex items-center gap-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 transition"
+            className="flex items-center gap-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 md:px-3 py-1.5 rounded-lg border border-slate-200 transition"
           >
             <Terminal className="w-3.5 h-3.5 text-slate-500" />
-            <span>Audit Logs</span>
+            <span className="hidden sm:inline">Audit Logs</span>
             {logsCount > 0 && (
               <span className="bg-slate-700 text-white text-[10px] px-1.5 py-0.2 rounded-full font-mono">
                 {logsCount}
