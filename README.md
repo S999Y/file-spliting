@@ -13,7 +13,7 @@
 
 <br />
 
-**[Features](#features)** | **[User Guide](USER_GUIDE.md)** | **[Quick Start](#quick-start)** | **[How It Works](#how-it-works)** | **[API Reference](#api-reference)** | **[Architecture](#architecture)** | **[Deployment](#deployment)**
+**[Features](#features)** | **[User Guide](USER_GUIDE.md)** | **[Quick Start](#quick-start)** | **[How It Works](#how-it-works)** | **[Architecture](#architecture)** | **[Deployment](#deployment)**
 
 </div>
 
@@ -25,7 +25,7 @@ FileShard is a browser-first file toolkit that replicates the core workflow of *
 
 No file data ever leaves your machine unless you explicitly choose to upload it to a cloud provider. Your files stay private.
 
-> **New to FileShard?** Read the **[Complete User Guide](USER_GUIDE.md)** for step-by-step instructions on splitting, reassembling, encrypting, and verifying any file.
+> **New to FileShard?** Read the **[Complete User Guide](USER_GUIDE.md)** for step-by-step instructions.
 
 ### Key Differentiators
 
@@ -38,7 +38,10 @@ No file data ever leaves your machine unless you explicitly choose to upload it 
 | **WinRAR Naming** | `.part1.rar`, `.001`, `.part001` | Native |
 | **Checksum Verification** | SHA-256 per-part + master | CRC32 (weaker) |
 | **Batch Processing** | Queue-based with single save | No native batch |
+| **Batch Checksum Verify** | Upload checksums file + parts | No equivalent |
 | **Native Save Dialogs** | OS-level file/folder pickers | Native |
+| **Responsive Design** | Mobile + Desktop | Desktop only |
+| **Device Scoping** | Per-browser data isolation | N/A |
 | **Cross-Platform** | Any browser, any OS | OS-specific |
 
 ---
@@ -56,6 +59,7 @@ Split any file into smaller volume parts with WinRAR-compatible naming conventio
 - **Real-time progress** — speed (MB/s), ETA, RAM usage indicator
 - **One-click extraction scripts** — Windows `.bat` and Unix `.sh` included
 - **ZIP bundle export** — all parts + manifest + scripts in one archive
+- **Checksums download** — direct browser download in `.txt`, `.csv`, or `.json` (no save dialog)
 
 ### Password Protection (AES-256-GCM)
 
@@ -108,6 +112,15 @@ Queue multiple files for sequential processing with a shared save destination.
 - **Single directory picker** for the entire batch
 - Status tracking: QUEUED, PROCESSING, COMPLETED, FAILED
 
+### Checksum Verifier (Standalone + Batch)
+
+Verify file integrity against SHA-256 hashes.
+
+- **Single file mode** — drop any file, get its SHA-256 instantly
+- **Batch verify mode** — upload a checksums file (`.txt`, `.csv`, `.json`) exported from the split engine, then upload all part files and verify them in one pass
+- Visual match/mismatch results with per-file status
+- Works with checksums files exported from FileShard's split engine
+
 ### Cloud Storage
 
 Register shard backups against configurable cloud providers.
@@ -116,22 +129,30 @@ Register shard backups against configurable cloud providers.
 - Backup registry with localStorage persistence
 - One-click restore to reassembly workspace
 
-### Integrity Tool
+### Dashboard & Activity
 
-Standalone SHA-256 checksum calculator and verifier.
+- 4 stat cards: Total Processed, Bandwidth Saved, Operations, Integrity Checks
+- Quick action buttons for all tools
+- Recent activity feed with per-entry delete and "Clear All"
+- Device label display (browser + OS identifier)
 
-- Drag-and-drop any file
-- Instant hash computation (memory-safe streaming for multi-GB files)
-- Expected hash comparison with visual match/mismatch verdict
+### Device-Scoped Storage
 
-### Dashboard & Audit Logs
+- Each browser/device gets a unique device ID
+- All localStorage data is prefixed per device
+- Different browsers see completely separate stats, history, and settings
+- "Clear All Data" button in sidebar footer
+- Export all data as JSON
 
-System statistics with a live terminal-style audit stream.
+### Responsive Design
 
-- 7 log levels (INFO, SYS, AUTH, CHK, WARN, ERROR, SUCCESS)
-- Desktop notifications via Notification API
-- Synthesized audio feedback via Web Audio API
-- Exportable logs to `.txt`
+Fully responsive across all screen sizes:
+
+- **Mobile** — collapsible sidebar with hamburger menu, stacked layouts, touch-friendly buttons
+- **Tablet** — adaptive grids, progressive column hiding in tables
+- **Desktop** — full sidebar, multi-column layouts, complete data tables
+- All tables scroll horizontally on mobile with critical columns always visible
+- Font sizes and padding adapt per breakpoint
 
 ---
 
@@ -194,6 +215,13 @@ npm start
 3. **Set password** (optional) — applied to all splits
 4. **Execute** — directory picker appears once, then all files process sequentially into that folder
 
+### Batch Checksum Verification
+
+1. **Upload checksums file** — `.txt`, `.csv`, or `.json` exported from the split engine
+2. **Upload part files** — all the split volume files
+3. **Verify All** — FileShard computes SHA-256 for each file and compares against expected hashes
+4. **Review results** — per-file match/mismatch status with calculated and expected hashes
+
 ---
 
 ## Architecture
@@ -216,6 +244,7 @@ npm start
 |  crypto.ts        (SHA-256 + AES-256)   |
 |  saveHelper.ts    (OS save dialogs)     |
 |  cloudStorage.ts  (provider registry)   |
+|  dataStorage.ts   (device-scoped store) |
 |  sound.ts         (Web Audio synth)     |
 |                                         |
 |  Web Crypto API / Compression Streams   |
@@ -229,17 +258,7 @@ npm start
 - **Memory-safe streaming** — custom pure-JS SHA-256 hasher processes multi-GB files in 8 MB chunks without loading entire files into RAM
 - **AES-256-GCM encryption** — Web Crypto API with PBKDF2 key derivation (100K iterations)
 - **Manifest format** — `.fshard.json` stores original file metadata, checksums, encryption flags, and per-part verification hashes
-
-### Server API (Optional)
-
-The Express backend mirrors core operations as REST endpoints for headless/CI use:
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/health` | Server health check |
-| `POST` | `/api/split` | Split file server-side (multipart upload) |
-| `POST` | `/api/compress` | Compress file server-side (ZIP output) |
-| `POST` | `/api/reassemble` | Reassemble parts server-side (checksum verified) |
+- **Device-scoped persistence** — all localStorage keys are prefixed with a unique device ID for per-browser data isolation
 
 ---
 
@@ -252,21 +271,23 @@ fileshard/
 +-- tsconfig.json                 # TypeScript configuration
 +-- vite.config.ts                # Vite + React + Tailwind
 +-- vercel.json                   # Vercel deployment config
++-- README.md                     # Project overview
++-- USER_GUIDE.md                 # Complete user documentation
 +-- src/
 |   +-- main.tsx                  # React entry point
-|   +-- App.tsx                   # Root layout, tab routing, state
+|   +-- App.tsx                   # Root layout, tab routing, mobile sidebar
 |   +-- types.ts                  # Shared TypeScript interfaces
 |   +-- index.css                 # Tailwind CSS import
 |   +-- components/
-|   |   +-- Sidebar.tsx           # Left navigation
-|   |   +-- Header.tsx            # Top header bar
-|   |   +-- DashboardView.tsx     # System metrics & live logs
+|   |   +-- Sidebar.tsx           # Left nav (responsive, device label, clear data)
+|   |   +-- Header.tsx            # Top bar (responsive, hamburger menu)
+|   |   +-- DashboardView.tsx     # Stats, quick actions, recent activity
 |   |   +-- SplitEngineView.tsx   # WinRAR split engine UI
 |   |   +-- ReassembleView.tsx    # Volume reassembly UI
 |   |   +-- CompressorView.tsx    # Image/file compression UI
 |   |   +-- BatchQueueView.tsx    # Batch queue manager UI
 |   |   +-- CloudStorageView.tsx  # Cloud backup management UI
-|   |   +-- IntegrityToolView.tsx # Checksum verifier UI
+|   |   +-- IntegrityToolView.tsx # Single + batch checksum verifier
 |   |   +-- AuditLogModal.tsx     # Full-screen log modal
 |   |   +-- LiveAuditLogs.tsx     # Terminal-style log viewer
 |   +-- utils/
@@ -276,11 +297,11 @@ fileshard/
 |   |   +-- crypto.ts             # SHA-256, AES-256-GCM, formatting
 |   |   +-- saveHelper.ts         # File System Access API dialogs
 |   |   +-- cloudStorage.ts       # Provider config + backup registry
+|   |   +-- dataStorage.ts        # Device-scoped localStorage persistence
 |   |   +-- sound.ts              # Web Audio notification synthesizer
 |   +-- server/
 |       +-- fileUtils.ts          # Node.js split/reassemble/checksum
 +-- dist/                         # Production build output
-+-- uploads/                      # Server-side upload workspace
 ```
 
 ---
@@ -383,6 +404,7 @@ npm run build
 | SHA-256 Hashing | Yes | Yes | Yes | Yes |
 | Native Save Dialog | Yes | Yes | No | No |
 | Native Folder Picker | Yes | Yes | No | No |
+| Responsive Layout | Yes | Yes | Yes | Yes |
 
 > **Note:** On browsers without File System Access API support (Safari, Firefox), FileShard automatically falls back to standard browser downloads.
 
@@ -403,21 +425,6 @@ npm run build
 | Image Processing | Canvas API | -- |
 | Icons | Lucide React | 0.546 |
 | Animations | canvas-confetti | 1.9 |
-
----
-
-## Environment Variables
-
-Copy the example and adjust as needed:
-
-```bash
-cp .env.example .env.local
-```
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GEMINI_API_KEY` | Optional | For Gemini AI features (not used by core operations) |
-| `APP_URL` | Optional | Public URL of a hosted deployment |
 
 ---
 

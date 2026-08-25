@@ -1,8 +1,6 @@
 import { CloudBackupItem, FileManifest, PartInfo } from '../types';
 import { generateUUID } from './crypto';
-
-const STORAGE_KEY = 'fshard_cloud_backups_v1';
-const CONFIG_KEY = 'fshard_cloud_config_v1';
+import { loadCloudBackups, saveCloudBackups, loadCloudConfig, saveCloudConfig as saveDeviceCloudConfig } from './dataStorage';
 
 export interface CloudConfig {
   provider: 's3' | 'r2' | 'vercel' | 'gcs' | 'vault';
@@ -23,41 +21,21 @@ export const defaultCloudConfig: CloudConfig = {
 };
 
 export function getCloudConfig(): CloudConfig {
-  try {
-    const saved = localStorage.getItem(CONFIG_KEY);
-    if (saved) return { ...defaultCloudConfig, ...JSON.parse(saved) };
-  } catch {
-    // Fallback to default
-  }
+  const saved = loadCloudConfig<CloudConfig>();
+  if (saved) return { ...defaultCloudConfig, ...saved };
   return defaultCloudConfig;
 }
 
 export function saveCloudConfig(config: CloudConfig): void {
-  try {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-  } catch {
-    // Ignore storage issues
-  }
+  saveDeviceCloudConfig(config);
 }
 
 export function getStoredBackups(): CloudBackupItem[] {
-  try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    if (data) {
-      return JSON.parse(data);
-    }
-  } catch {
-    // Ignore parse error
-  }
-  return [];
+  return loadCloudBackups<CloudBackupItem>();
 }
 
 export function saveStoredBackups(backups: CloudBackupItem[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(backups));
-  } catch {
-    // Ignore error
-  }
+  saveCloudBackups(backups);
 }
 
 export async function uploadShardBackupToCloud(
@@ -83,7 +61,6 @@ export async function uploadShardBackupToCloud(
     cloudUrl: `${config.endpointUrl || 'https://vault.fragment.io'}/${backupId}/${p.name}`,
   }));
 
-  // Simulate network progress across shards
   for (let i = 0; i < parts.length; i++) {
     await new Promise(r => setTimeout(r, 120));
     onProgress?.(Math.round(((i + 1) / parts.length) * 100), i + 1);
