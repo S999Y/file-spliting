@@ -17,6 +17,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [isLogsModalOpen, setIsLogsModalOpen] = useState<boolean>(false);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
 
   const [stats, setStats] = useState<SystemStats>(() => loadStats());
   const [logs, setLogs] = useState<AuditLog[]>(() => loadLogs());
@@ -66,28 +67,51 @@ export default function App() {
     setLogs([]);
   };
 
+  const handleNavigate = (tab: string) => {
+    setActiveTab(tab);
+    setSidebarOpen(false);
+  };
+
   return (
     <div className="h-screen w-screen bg-slate-100 flex overflow-hidden text-slate-900 font-sans antialiased select-none">
-      <Sidebar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        soundEnabled={soundEnabled}
-        setSoundEnabled={setSoundEnabled}
-      />
+      {/* Mobile sidebar backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-30 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
+      {/* Sidebar */}
+      <div className={`
+        fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-200 ease-in-out
+        md:relative md:translate-x-0
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        <Sidebar
+          activeTab={activeTab}
+          setActiveTab={handleNavigate}
+          soundEnabled={soundEnabled}
+          setSoundEnabled={setSoundEnabled}
+          onClose={() => setSidebarOpen(false)}
+        />
+      </div>
+
+      {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-slate-100">
         <Header
           activeTab={activeTab}
           onOpenLogs={() => setIsLogsModalOpen(true)}
           logsCount={logs.length}
+          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         />
 
-        <main className="flex-1 overflow-y-auto p-8 select-text">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 select-text">
           <div className="max-w-7xl mx-auto space-y-6">
             {activeTab === 'dashboard' && (
               <DashboardView
                 stats={stats}
-                onNavigate={tab => setActiveTab(tab)}
+                onNavigate={handleNavigate}
               />
             )}
 
@@ -130,7 +154,7 @@ export default function App() {
             {activeTab === 'cloud' && (
               <CloudStorageView
                 onLog={addLog}
-                onNavigateToReassemble={() => setActiveTab('reassemble')}
+                onNavigateToReassemble={() => handleNavigate('reassemble')}
                 onSendNotification={handleSendNotification}
               />
             )}

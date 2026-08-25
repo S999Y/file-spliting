@@ -6,26 +6,22 @@ import {
   FileCode,
   ShieldCheck,
   Zap,
-  HardDrive,
-  Cloud,
   CheckCircle,
   Archive,
   RefreshCw,
   Copy,
   Check,
-  AlertCircle,
   Terminal,
   FolderArchive,
   HelpCircle,
   Layers,
   Lock,
   LockOpen,
-  Save
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { SplitConfig, PartInfo, FileManifest } from '../types';
+import { SplitConfig, PartInfo } from '../types';
 import { formatBytes, formatDuration, parseSizeString } from '../utils/crypto';
-import { splitFileInBrowser, createBundleZip, SplitResult, generateExtractionScripts } from '../utils/splitter';
+import { splitFileInBrowser, createBundleZip, SplitResult } from '../utils/splitter';
 import { uploadShardBackupToCloud, getCloudConfig } from '../utils/cloudStorage';
 import { soundManager } from '../utils/sound';
 import { promptSaveLocation, writeBlobToStream, promptSaveDirectory, writeBlobsToDirectory, fallbackDownloadBlob } from '../utils/saveHelper';
@@ -58,7 +54,6 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
   const [archiveFormat, setArchiveFormat] = useState<'rar' | 'zip' | '7z'>('rar');
   const [archiveComment, setArchiveComment] = useState<string>('');
 
-  // Processing state
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
   const [currentPart, setCurrentPart] = useState<number>(0);
@@ -66,7 +61,6 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
   const [speedMBs, setSpeedMBs] = useState<number>(0);
   const [etaSeconds, setEtaSeconds] = useState<number>(0);
 
-  // Result state
   const [result, setResult] = useState<SplitResult | null>(null);
   const [isBundlingZip, setIsBundlingZip] = useState<boolean>(false);
   const [zipProgress, setZipProgress] = useState<number>(0);
@@ -78,7 +72,6 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Preset sizes matching WinRAR & popular platforms
   const presets = [
     { label: '500 MB', sizeMb: 500, text: '500M', desc: 'WinRAR Standard' },
     { label: '1 GB', sizeMb: 1024, text: '1G', desc: '1024 MB Volume' },
@@ -179,11 +172,10 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
       confetti({ particleCount: 60, spread: 50, origin: { y: 0.8 } });
 
       onSendNotification(
-        'WinRAR Multi-Volume Split Complete',
+        'Multi-Volume Split Complete',
         `Successfully split ${file.name} into ${splitRes.parts.length} volumes${password ? ' (AES-256-GCM encrypted)' : ''}.`
       );
 
-      // Auto cloud upload if destination requested
       if (destination === 'cloud' || destination === 'both') {
         setIsCloudSyncing(true);
         const cloudConfig = getCloudConfig();
@@ -281,14 +273,8 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
 
     const blob = new Blob([content], { type: mimeType });
     const fileName = `${result.manifest.originalName}.checksums.${ext}`;
-    const dirHandle = await getOrPromptDirectory();
-    if (dirHandle) {
-      await writeBlobsToDirectory(dirHandle, [{ blob, name: fileName }], false);
-      onLog('SUCCESS', `Saved checksums to directory: ${fileName}`);
-    } else {
-      fallbackDownloadBlob(blob, fileName);
-      onLog('INFO', `Exported checksums: ${fileName}`);
-    }
+    fallbackDownloadBlob(blob, fileName);
+    onLog('INFO', `Exported checksums: ${fileName}`);
   };
 
   const handleDownloadScript = async (type: 'bat' | 'sh') => {
@@ -346,27 +332,27 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
   const estimatedPartCount = file ? (splitMode === 'size' ? Math.ceil(file.size / estimatedPartSize) : targetCount) : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 md:space-y-6">
       {/* File Upload Zone */}
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+      <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-1 gap-2">
+          <h2 className="text-sm md:text-base font-bold text-slate-900 flex items-center gap-2">
             <FolderArchive className="w-4 h-4 text-blue-600" />
-            <span>WinRAR Multi-Volume Split Engine</span>
+            <span>Multi-Volume Split Engine</span>
           </h2>
-          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-semibold border border-blue-200">
-            Multi-GB Stream Hashing Enabled
+          <span className="text-[10px] md:text-[11px] font-mono px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-semibold border border-blue-200 self-start">
+            Stream Hashing
           </span>
         </div>
-        <p className="text-xs text-slate-500 mb-4">
-          Split large video files, disc images (ISO), archives, or installers (2GB, 5GB, 10GB+) into smaller volume parts with zero RAM bloat.
+        <p className="text-[11px] md:text-xs text-slate-500 mb-4 hidden sm:block">
+          Split large video files, disc images (ISO), archives, or installers into smaller volume parts with zero RAM bloat.
         </p>
 
         <div
           onDragOver={e => e.preventDefault()}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition ${
+          className={`border-2 border-dashed rounded-xl p-5 md:p-8 text-center cursor-pointer transition ${
             file
               ? 'border-blue-400 bg-blue-50/30'
               : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50/60'
@@ -378,19 +364,19 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
             onChange={handleFileChange}
             className="hidden"
           />
-          <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3">
-            <Upload className="w-6 h-6" />
+          <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3">
+            <Upload className="w-5 h-5 md:w-6 md:h-6" />
           </div>
 
           {file ? (
             <div>
-              <p className="text-sm font-bold text-slate-900 font-mono">{file.name}</p>
-              <p className="text-xs text-slate-500 font-mono mt-1">
-                Size: <span className="font-bold text-slate-700">{formatBytes(file.size)}</span> ({(file.size / (1024 * 1024)).toFixed(2)} MB)
+              <p className="text-xs md:text-sm font-bold text-slate-900 font-mono truncate">{file.name}</p>
+              <p className="text-[11px] md:text-xs text-slate-500 font-mono mt-1">
+                <span className="font-bold text-slate-700">{formatBytes(file.size)}</span>
               </p>
               {file.size > 1024 * 1024 * 1024 && (
-                <p className="text-[11px] text-emerald-600 font-semibold mt-1">
-                  ⚡ 2+ GB Large File Detected: Zero-RAM Chunk Slicing will be used.
+                <p className="text-[10px] md:text-[11px] text-emerald-600 font-semibold mt-1">
+                  Large file detected — streaming chunk slicing enabled.
                 </p>
               )}
               <button
@@ -401,16 +387,16 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
                 }}
                 className="mt-3 text-xs text-blue-600 font-bold hover:underline"
               >
-                Change Selected File
+                Change File
               </button>
             </div>
           ) : (
             <div>
-              <p className="text-sm font-bold text-slate-800">
-                Click to browse or drag & drop large file here (e.g. 2.24 GB MP4)
+              <p className="text-xs md:text-sm font-bold text-slate-800">
+                Click or drag & drop a large file here
               </p>
-              <p className="text-xs text-slate-400 mt-1">
-                Zero RAM limits • Supports multi-gigabyte files with native WinRAR volume compatibility
+              <p className="text-[11px] md:text-xs text-slate-400 mt-1">
+                Zero RAM limits · Supports multi-gigabyte files
               </p>
             </div>
           )}
@@ -418,39 +404,38 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
       </div>
 
       {/* Configuration Cards Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Config: Volume Sizing (WinRAR style) */}
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 md:gap-6">
+        {/* Left Config: Volume Sizing */}
+        <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <h3 className="text-xs md:text-sm font-bold text-slate-900 flex items-center gap-1.5">
               <Layers className="w-4 h-4 text-blue-600" />
-              <span>Split to Volumes, Size</span>
+              <span>Split to Volumes</span>
             </h3>
-            <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs font-semibold">
+            <div className="flex bg-slate-100 p-0.5 rounded-lg text-[11px] md:text-xs font-semibold">
               <button
                 onClick={() => setSplitMode('size')}
-                className={`px-3 py-1 rounded-md transition ${
+                className={`px-2.5 md:px-3 py-1 rounded-md transition ${
                   splitMode === 'size' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-500'
                 }`}
               >
-                By Volume Size
+                By Size
               </button>
               <button
                 onClick={() => setSplitMode('count')}
-                className={`px-3 py-1 rounded-md transition ${
+                className={`px-2.5 md:px-3 py-1 rounded-md transition ${
                   splitMode === 'count' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-500'
                 }`}
               >
-                By Part Count
+                By Count
               </button>
             </div>
           </div>
 
           {splitMode === 'size' ? (
             <div className="space-y-3">
-              {/* Presets */}
-              <label className="block text-xs font-bold text-slate-500 uppercase">WinRAR & Standard Presets</label>
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              <label className="block text-[11px] md:text-xs font-bold text-slate-500 uppercase">Presets</label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                 {presets.map((preset, idx) => (
                   <button
                     key={idx}
@@ -466,19 +451,16 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
                         : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
                     }`}
                   >
-                    <p className="text-[11px] font-bold truncate">{preset.label}</p>
-                    <p className="text-[10px] text-slate-400 font-mono">{preset.desc}</p>
+                    <p className="text-[10px] md:text-[11px] font-bold truncate">{preset.label}</p>
+                    <p className="text-[9px] md:text-[10px] text-slate-400 font-mono">{preset.desc}</p>
                   </button>
                 ))}
               </div>
 
-              {/* Custom Size Input with WinRAR syntax */}
               <div className="pt-2">
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-slate-700">
-                    Volume Size (e.g. <span className="font-mono text-blue-600">500M</span>, <span className="font-mono text-blue-600">1G</span>, <span className="font-mono text-blue-600">100M</span>)
-                  </label>
-                </div>
+                <label className="text-[11px] md:text-xs font-bold text-slate-700 block mb-1.5">
+                  Custom Volume Size (e.g. <span className="font-mono text-blue-600">500M</span>, <span className="font-mono text-blue-600">1G</span>)
+                </label>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -512,8 +494,8 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
             </div>
           ) : (
             <div className="space-y-3">
-              <label className="block text-xs font-bold text-slate-700">
-                Total Volumes to Generate: <span className="text-blue-600 font-bold">{targetCount} Parts</span>
+              <label className="block text-[11px] md:text-xs font-bold text-slate-700">
+                Total Volumes: <span className="text-blue-600 font-bold">{targetCount} Parts</span>
               </label>
               <input
                 type="range"
@@ -523,59 +505,56 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
                 onChange={e => setTargetCount(parseInt(e.target.value, 10))}
                 className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
               />
-              <div className="flex justify-between text-[11px] text-slate-400 font-mono">
-                <span>2 Parts</span>
-                <span>16 Parts</span>
-                <span>32 Parts</span>
+              <div className="flex justify-between text-[10px] md:text-[11px] text-slate-400 font-mono">
+                <span>2</span>
+                <span>16</span>
+                <span>32</span>
               </div>
             </div>
           )}
 
-          {/* Volume Calculation Preview */}
           {file && (
-            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs font-mono text-slate-600">
-              Output Estimate: <span className="font-bold text-blue-600">{estimatedPartCount} Volumes</span> (~{formatBytes(file.size / Math.max(1, estimatedPartCount))} each)
+            <div className="p-2.5 md:p-3 bg-slate-50 rounded-lg border border-slate-200 text-[11px] md:text-xs font-mono text-slate-600">
+              Output: <span className="font-bold text-blue-600">{estimatedPartCount} Volumes</span> (~{formatBytes(file.size / Math.max(1, estimatedPartCount))} each)
             </div>
           )}
         </div>
 
-        {/* Right Config: Naming Scheme & Options */}
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-          <h3 className="text-sm font-bold text-slate-900">Volume Naming & Export Format</h3>
+        {/* Right Config: Naming & Options */}
+        <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+          <h3 className="text-xs md:text-sm font-bold text-slate-900">Naming & Format</h3>
 
-          {/* Naming Scheme */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">Volume Naming Convention</label>
+            <label className="block text-[11px] md:text-xs font-bold text-slate-700 mb-1.5">Volume Naming</label>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { id: 'winrar', label: 'WinRAR Archive', sample: '.part1.rar, .part2.rar' },
-                { id: 'standard', label: 'Multi-Part Volume', sample: '.part001, .part002' },
-                { id: 'numeric', label: '7-Zip Numeric', sample: '.001, .002' },
-                { id: 'bin', label: 'Binary Shard', sample: '.part1.bin, .part2.bin' },
+                { id: 'winrar', label: 'WinRAR', sample: '.part1.rar' },
+                { id: 'standard', label: 'Multi-Part', sample: '.part001' },
+                { id: 'numeric', label: '7-Zip', sample: '.001, .002' },
+                { id: 'bin', label: 'Binary Shard', sample: '.part1.bin' },
               ].map(fmt => (
                 <button
                   key={fmt.id}
                   type="button"
                   onClick={() => setNamingFormat(fmt.id as SplitConfig['namingFormat'])}
-                  className={`p-2.5 rounded-lg border text-left transition ${
+                  className={`p-2 md:p-2.5 rounded-lg border text-left transition ${
                     namingFormat === fmt.id
                       ? 'border-blue-500 bg-blue-50/50 text-blue-900'
                       : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
                   }`}
                 >
-                  <p className="text-xs font-bold">{fmt.label}</p>
-                  <p className="text-[10px] text-slate-400 font-mono truncate">{fmt.sample}</p>
+                  <p className="text-[11px] md:text-xs font-bold">{fmt.label}</p>
+                  <p className="text-[9px] md:text-[10px] text-slate-400 font-mono truncate">{fmt.sample}</p>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Compression Toggle */}
-          <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-            <Zap className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+          <div className="flex items-start gap-3 p-2.5 md:p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <Zap className="w-4 h-4 md:w-5 md:h-5 text-amber-500 shrink-0 mt-0.5" />
             <div className="flex-1">
               <label className="flex items-center justify-between cursor-pointer">
-                <span className="text-xs font-bold text-slate-800">Lossless Stream Compression</span>
+                <span className="text-[11px] md:text-xs font-bold text-slate-800">Lossless Compression</span>
                 <input
                   type="checkbox"
                   checked={compressParts}
@@ -583,27 +562,26 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
                   className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                 />
               </label>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Losslessly compresses chunks using GZIP streams. (Leave off for raw bitwise slice compatibility).
+              <p className="text-[10px] md:text-[11px] text-slate-500 mt-0.5 hidden sm:block">
+                GZIP compression on each chunk. Leave off for raw bitwise slice compatibility.
               </p>
             </div>
           </div>
 
-          {/* Password Protection */}
-          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+          <div className="p-2.5 md:p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
             <div className="flex items-center gap-2">
-              <Lock className="w-4 h-4 text-slate-600" />
-              <span className="text-xs font-bold text-slate-800">Password Protection (AES-256-GCM)</span>
+              <Lock className="w-3.5 h-3.5 md:w-4 md:h-4 text-slate-600" />
+              <span className="text-[11px] md:text-xs font-bold text-slate-800">Password (AES-256-GCM)</span>
             </div>
-            <p className="text-[11px] text-slate-500">
-              Encrypt each volume with military-grade AES-256 encryption. Password required for reassembly.
+            <p className="text-[10px] md:text-[11px] text-slate-500 hidden sm:block">
+              Encrypt each volume with military-grade AES-256 encryption.
             </p>
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="Enter archive password (optional)"
+                placeholder="Archive password (optional)"
                 className="w-full rounded-lg border border-slate-300 p-2 text-sm font-mono pr-9 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               />
               <button
@@ -615,16 +593,15 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
               </button>
             </div>
             {password && (
-              <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 font-bold">
+              <div className="flex items-center gap-1.5 text-[9px] md:text-[10px] text-emerald-700 font-bold">
                 <ShieldCheck className="w-3 h-3" />
-                <span>AES-256-GCM encryption will be applied to all volumes</span>
+                <span>AES-256-GCM encryption enabled</span>
               </div>
             )}
           </div>
 
-          {/* Archive Format */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">Archive Format</label>
+            <label className="block text-[11px] md:text-xs font-bold text-slate-700 mb-1.5">Archive Format</label>
             <div className="grid grid-cols-3 gap-2">
               {[
                 { id: 'rar' as const, label: 'RAR', sample: '.part1.rar' },
@@ -641,35 +618,33 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
                       : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
                   }`}
                 >
-                  <p className="text-xs font-bold">{fmt.label}</p>
-                  <p className="text-[10px] text-slate-400 font-mono">{fmt.sample}</p>
+                  <p className="text-[11px] md:text-xs font-bold">{fmt.label}</p>
+                  <p className="text-[9px] md:text-[10px] text-slate-400 font-mono">{fmt.sample}</p>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Archive Comment */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">Archive Comment (optional)</label>
+            <label className="block text-[11px] md:text-xs font-bold text-slate-700 mb-1.5">Comment (optional)</label>
             <input
               type="text"
               value={archiveComment}
               onChange={e => setArchiveComment(e.target.value)}
-              placeholder="Add a comment to the archive..."
+              placeholder="Archive comment..."
               className="w-full rounded-lg border border-slate-300 p-2 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
-          {/* Action Button */}
           <button
             onClick={handleStartSplit}
             disabled={!file || isProcessing}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-sm disabled:bg-slate-300 transition flex items-center justify-center gap-2 text-sm"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 md:py-3 px-4 rounded-lg shadow-sm disabled:bg-slate-300 transition flex items-center justify-center gap-2 text-xs md:text-sm"
           >
             {isProcessing ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Splitting Volumes ({progress}%)...</span>
+                <span>Splitting ({progress}%)...</span>
               </>
             ) : (
               <>
@@ -683,31 +658,31 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
 
       {/* Real-time Progress Bar */}
       {isProcessing && (
-        <div className="bg-slate-900 text-white p-6 rounded-xl shadow-lg space-y-4">
+        <div className="bg-slate-900 text-white p-4 md:p-6 rounded-xl shadow-lg space-y-4">
           <div className="flex justify-between items-end">
             <div>
-              <p className="text-xs font-mono text-blue-400 uppercase font-bold">Multi-Volume Slicing In Progress</p>
-              <h3 className="text-base font-bold font-mono">{file?.name}</h3>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">
-                Processing Volume {currentPart} of {totalParts} ({formatBytes(getEffectivePartSizeBytes())} per part)
+              <p className="text-[10px] md:text-xs font-mono text-blue-400 uppercase font-bold">Slicing In Progress</p>
+              <h3 className="text-xs md:text-base font-bold font-mono truncate max-w-[200px] md:max-w-none">{file?.name}</h3>
+              <p className="text-[10px] md:text-xs text-slate-400 font-mono mt-0.5">
+                Volume {currentPart}/{totalParts} ({formatBytes(getEffectivePartSizeBytes())} each)
               </p>
             </div>
             <div className="text-right">
-              <span className="text-3xl font-black font-mono text-blue-400">{progress}%</span>
+              <span className="text-2xl md:text-3xl font-black font-mono text-blue-400">{progress}%</span>
             </div>
           </div>
 
-          <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden">
+          <div className="w-full bg-slate-800 h-2.5 md:h-3 rounded-full overflow-hidden">
             <div
               className="bg-blue-500 h-full rounded-full transition-all duration-300"
               style={{ width: `${progress}%` }}
             ></div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 text-xs font-mono text-slate-400 pt-1 border-t border-slate-800">
-            <div>Throughput: <span className="text-white font-bold">{speedMBs} MB/s</span></div>
-            <div className="text-center">Remaining ETA: <span className="text-white font-bold">{formatDuration(etaSeconds)}</span></div>
-            <div className="text-right">RAM Mode: <span className="text-emerald-400 font-bold">Streaming (0-bloat)</span></div>
+          <div className="grid grid-cols-3 gap-2 text-[10px] md:text-xs font-mono text-slate-400 pt-1 border-t border-slate-800">
+            <div><span className="hidden sm:inline">Throughput: </span><span className="text-white font-bold">{speedMBs} MB/s</span></div>
+            <div className="text-center"><span className="hidden sm:inline">ETA: </span><span className="text-white font-bold">{formatDuration(etaSeconds)}</span></div>
+            <div className="text-right"><span className="hidden sm:inline">RAM: </span><span className="text-emerald-400 font-bold">Streaming</span></div>
           </div>
         </div>
       )}
@@ -716,80 +691,79 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
       {result && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden space-y-0">
           {/* Result Header */}
-          <div className="p-5 border-b border-slate-100 bg-emerald-50/50 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-emerald-100 text-emerald-700 rounded-lg flex items-center justify-center">
-                <CheckCircle className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  Split Complete: {result.parts.length} Volumes Generated
-                </h3>
-                <p className="text-xs text-slate-500 font-mono">
-                  Master SHA-256: <span className="text-slate-800 font-bold">{result.manifest.originalChecksum.substring(0, 24)}...</span>
-                </p>
+          <div className="p-4 md:p-5 border-b border-slate-100 bg-emerald-50/50">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 md:w-10 md:h-10 bg-emerald-100 text-emerald-700 rounded-lg flex items-center justify-center shrink-0">
+                  <CheckCircle className="w-4 h-4 md:w-5 md:h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm md:text-base font-bold text-slate-900">
+                    Split Complete: {result.parts.length} Volumes
+                  </h3>
+                  <p className="text-[10px] md:text-xs text-slate-500 font-mono">
+                    SHA-256: <span className="text-slate-800 font-bold">{result.manifest.originalChecksum.substring(0, 24)}...</span>
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* Top Action Buttons */}
-            <div className="flex flex-wrap items-center gap-2">
+            {/* Action Buttons */}
+            <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
               <button
                 onClick={handleDownloadAllPartsSequential}
                 disabled={isBatchDownloading}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-xs disabled:opacity-50"
+                className="flex items-center gap-1.5 px-2.5 md:px-3.5 py-1.5 md:py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] md:text-xs font-bold transition shadow-xs disabled:opacity-50"
               >
-                <Download className="w-3.5 h-3.5" />
-                <span>{isBatchDownloading ? 'Downloading Volumes...' : 'Download All Volumes'}</span>
+                <Download className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                <span>{isBatchDownloading ? 'Downloading...' : 'Download All'}</span>
               </button>
 
               <button
                 onClick={handleDownloadZipBundle}
                 disabled={isBundlingZip}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition shadow-xs disabled:opacity-50"
+                className="flex items-center gap-1.5 px-2.5 md:px-3.5 py-1.5 md:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] md:text-xs font-bold transition shadow-xs disabled:opacity-50"
               >
-                <Archive className="w-3.5 h-3.5" />
-                <span>{isBundlingZip ? `Bundling ZIP (${zipProgress}%)...` : 'Download as ZIP Bundle'}</span>
+                <Archive className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                <span>{isBundlingZip ? `ZIP ${zipProgress}%` : 'ZIP Bundle'}</span>
               </button>
 
               <button
                 onClick={() => handleDownloadScript('bat')}
-                className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition border border-slate-200"
-                title="Windows CMD copy /b 1-click script"
+                className="flex items-center gap-1.5 px-2 md:px-3 py-1.5 md:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] md:text-xs font-bold transition border border-slate-200"
               >
-                <Terminal className="w-3.5 h-3.5 text-blue-600" />
-                <span>Windows (.bat)</span>
+                <Terminal className="w-3 h-3 md:w-3.5 md:h-3.5 text-blue-600" />
+                <span>.bat</span>
               </button>
 
               <button
                 onClick={() => handleDownloadScript('sh')}
-                className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition border border-slate-200"
-                title="Unix/macOS cat 1-click script"
+                className="flex items-center gap-1.5 px-2 md:px-3 py-1.5 md:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] md:text-xs font-bold transition border border-slate-200"
               >
-                <Terminal className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Unix/Mac (.sh)</span>
+                <Terminal className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-600" />
+                <span>.sh</span>
               </button>
 
               <button
                 onClick={handleDownloadManifest}
-                className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition border border-slate-200"
+                className="flex items-center gap-1.5 px-2 md:px-3 py-1.5 md:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] md:text-xs font-bold transition border border-slate-200"
               >
-                <FileCode className="w-3.5 h-3.5 text-slate-600" />
-                <span>Manifest (.fshard.json)</span>
+                <FileCode className="w-3 h-3 md:w-3.5 md:h-3.5 text-slate-600" />
+                <span className="hidden sm:inline">Manifest</span>
               </button>
 
-              {/* Checksums Download */}
               <div className="flex items-center gap-0 border border-slate-200 rounded-lg overflow-hidden">
                 <button
                   onClick={handleDownloadChecksums}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition"
+                  className="flex items-center gap-1.5 px-2 md:px-3 py-1.5 md:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] md:text-xs font-bold transition"
                 >
-                  <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Checksums</span>
+                  <ShieldCheck className="w-3 h-3 md:w-3.5 md:h-3.5 text-amber-600" />
+                  <span className="hidden sm:inline">Checksums</span>
                 </button>
                 <select
                   value={checksumFormat}
                   onChange={e => setChecksumFormat(e.target.value as 'txt' | 'csv' | 'json')}
-                  className="px-1.5 py-2 text-[10px] font-bold text-slate-600 bg-slate-50 border-l border-slate-200 cursor-pointer focus:outline-none"
+                  className="px-1 md:px-1.5 py-1.5 md:py-2 text-[9px] md:text-[10px] font-bold text-slate-600 bg-slate-50 border-l border-slate-200 cursor-pointer focus:outline-none"
                 >
                   <option value="txt">.txt</option>
                   <option value="csv">.csv</option>
@@ -799,43 +773,42 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
             </div>
           </div>
 
-          {/* WinRAR Extraction Help Box */}
-          <div className="p-4 bg-blue-50/50 border-b border-blue-100 flex items-start gap-3">
+          {/* Extraction Help */}
+          <div className="p-3 md:p-4 bg-blue-50/50 border-b border-blue-100 flex items-start gap-2 md:gap-3">
             <HelpCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-            <div className="text-xs text-blue-900 space-y-0.5">
-              <p className="font-bold">How to Reassemble These Volumes Offline (WinRAR / CLI):</p>
+            <div className="text-[11px] md:text-xs text-blue-900 space-y-0.5">
+              <p className="font-bold">How to Reassemble:</p>
               <p className="text-blue-800">
-                1. Put all downloaded volume parts in the <strong>same folder</strong>.<br />
-                2. <strong>In WinRAR / 7-Zip:</strong> Right-click the 1st part (<span className="font-mono">{result.parts[0]?.name}</span>) and select <strong>"Extract Here"</strong>.<br />
-                3. <strong>Or via Terminal:</strong> Run the downloaded <span className="font-mono">extract.bat</span> (Windows) or <span className="font-mono">extract.sh</span> (Mac/Linux) to join them instantly with zero extra software!
+                1. Put all parts in the <strong>same folder</strong>.<br />
+                2. Right-click the 1st part (<span className="font-mono">{result.parts[0]?.name}</span>) → <strong>"Extract Here"</strong>.<br />
+                3. Or run the downloaded <span className="font-mono">extract.bat</span> / <span className="font-mono">extract.sh</span> script.
               </p>
             </div>
           </div>
 
-          {/* Shards Table */}
-          <div className="p-6 overflow-x-auto">
-            <table className="w-full text-left text-xs font-mono">
+          {/* Parts Table */}
+          <div className="p-4 md:p-6 overflow-x-auto">
+            <table className="w-full text-left text-[11px] md:text-xs font-mono">
               <thead>
-                <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px]">
-                  <th className="pb-3 px-2 font-bold">#</th>
-                  <th className="pb-3 font-bold">Volume Name</th>
-                  <th className="pb-3 font-bold">Size</th>
-                  <th className="pb-3 font-bold">SHA-256 Checksum</th>
-                  <th className="pb-3 font-bold">Status</th>
-                  <th className="pb-3 text-right font-bold">Action</th>
+                <tr className="border-b border-slate-200 text-slate-400 uppercase text-[9px] md:text-[10px]">
+                  <th className="pb-2 md:pb-3 px-1 md:px-2 font-bold">#</th>
+                  <th className="pb-2 md:pb-3 font-bold">Name</th>
+                  <th className="pb-2 md:pb-3 font-bold">Size</th>
+                  <th className="pb-2 md:pb-3 font-bold hidden sm:table-cell">SHA-256</th>
+                  <th className="pb-2 md:pb-3 font-bold">Status</th>
+                  <th className="pb-2 md:pb-3 text-right font-bold">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {result.parts.map(part => (
                   <tr key={part.index} className="hover:bg-slate-50/70 transition">
-                    <td className="py-3 px-2 font-bold text-slate-500">{part.index.toString().padStart(2, '0')}</td>
-                    <td className="py-3 font-bold text-slate-800">{part.name}</td>
-                    <td className="py-3 text-slate-600">{formatBytes(part.size)}</td>
-                    <td className="py-3">
+                    <td className="py-2 md:py-3 px-1 md:px-2 font-bold text-slate-500">{part.index.toString().padStart(2, '0')}</td>
+                    <td className="py-2 md:py-3 font-bold text-slate-800 max-w-[150px] md:max-w-none truncate">{part.name}</td>
+                    <td className="py-2 md:py-3 text-slate-600">{formatBytes(part.size)}</td>
+                    <td className="py-2 md:py-3 hidden sm:table-cell">
                       <button
                         onClick={() => handleCopyChecksum(part.checksum)}
-                        className="flex items-center gap-1 text-slate-500 hover:text-blue-600 font-mono text-[11px] group"
-                        title="Click to copy SHA-256 hash"
+                        className="flex items-center gap-1 text-slate-500 hover:text-blue-600 font-mono text-[10px] md:text-[11px] group"
                       >
                         <span>{part.checksum.substring(0, 16)}...</span>
                         {copiedHash === part.checksum ? (
@@ -845,18 +818,18 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
                         )}
                       </button>
                     </td>
-                    <td className="py-3">
-                      <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">
-                        VERIFIED ✓
+                    <td className="py-2 md:py-3">
+                      <span className="bg-emerald-100 text-emerald-800 px-1.5 md:px-2 py-0.5 rounded text-[9px] md:text-[10px] font-bold">
+                        OK
                       </span>
                     </td>
-                    <td className="py-3 text-right">
+                    <td className="py-2 md:py-3 text-right">
                       <button
                         onClick={() => handleDownloadPart(part)}
                         className="text-blue-600 hover:text-blue-800 font-bold hover:underline inline-flex items-center gap-1"
                       >
                         <Download className="w-3 h-3" />
-                        <span>Download</span>
+                        <span className="hidden sm:inline">Save</span>
                       </button>
                     </td>
                   </tr>
@@ -869,4 +842,3 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
     </div>
   );
 };
-

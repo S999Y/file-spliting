@@ -2,7 +2,7 @@
   "name": "fileshard",
   "private": true,
   "version": "3.0.0",
-  "description": "WinRAR-compatible file splitting, compression, encryption, and reassembly toolkit — entirely client-side.",
+  "description": "WinRAR-compatible file splitting, compression, encryption, and reassembly toolkit \u2014 entirely client-side.",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -25,6 +25,7 @@
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "multer": "^2.2.0",
+    "node-fetch": "^3.3.2",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "vite": "^6.2.3"
