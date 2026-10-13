@@ -1,6 +1,6 @@
 <div align="center">
 
-# FRAGMENT.IO / FileShard
+# fragment.io
 
 ### WinRAR-compatible file splitting, compression, encryption & reassembly — entirely in your browser.
 
@@ -19,17 +19,17 @@
 
 ---
 
-## What is FileShard?
+## What is fragment.io?
 
-FileShard is a browser-first file toolkit that replicates the core workflow of **WinRAR / 7-Zip** multi-volume archiving — splitting, reassembling, encrypting, and compressing files — entirely client-side using the Web Crypto API, Compression Streams API, and Canvas API.
+fragment.io is a browser-first file toolkit that replicates the core workflow of **WinRAR / 7-Zip** multi-volume archiving — splitting, reassembling, encrypting, and compressing files — entirely client-side using the Web Crypto API, Compression Streams API, and Canvas API.
 
 No file data ever leaves your machine unless you explicitly choose to upload it to a cloud provider. Your files stay private.
 
-> **New to FileShard?** Read the **[Complete User Guide](USER_GUIDE.md)** for step-by-step instructions.
+> **New to fragment.io?** Read the **[Complete User Guide](USER_GUIDE.md)** for step-by-step instructions.
 
 ### Key Differentiators
 
-| Feature | FileShard | WinRAR / 7-Zip |
+| Feature | fragment.io | WinRAR / 7-Zip |
 |---|---|---|
 | **Runs in** | Browser (zero install) | Desktop (requires install) |
 | **Encryption** | AES-256-GCM (Web Crypto API) | AES-256 (proprietary) |
@@ -119,7 +119,7 @@ Verify file integrity against SHA-256 hashes.
 - **Single file mode** — drop any file, get its SHA-256 instantly
 - **Batch verify mode** — upload a checksums file (`.txt`, `.csv`, `.json`) exported from the split engine, then upload all part files and verify them in one pass
 - Visual match/mismatch results with per-file status
-- Works with checksums files exported from FileShard's split engine
+- Works with checksums files exported from fragment.io's split engine
 
 ### Cloud Storage
 
@@ -197,7 +197,7 @@ npm start
 
 1. **Select a file** — drag-and-drop or click to browse (supports multi-GB files)
 2. **Configure** — choose volume size, naming format, compression, and password
-3. **Split** — FileShard slices the file, computes SHA-256 checksums, optionally compresses and encrypts each part
+3. **Split** — fragment.io slices the file, computes SHA-256 checksums, optionally compresses and encrypts each part
 4. **Save** — native OS dialog asks where to save the volumes (or "Download All" for browser fallback)
 
 ### Reassembling a File
@@ -219,7 +219,7 @@ npm start
 
 1. **Upload checksums file** — `.txt`, `.csv`, or `.json` exported from the split engine
 2. **Upload part files** — all the split volume files
-3. **Verify All** — FileShard computes SHA-256 for each file and compares against expected hashes
+3. **Verify All** — fragment.io computes SHA-256 for each file and compares against expected hashes
 4. **Review results** — per-file match/mismatch status with calculated and expected hashes
 
 ---
@@ -352,7 +352,7 @@ Every split operation produces a versioned manifest containing everything needed
 
 ## Encryption Details
 
-FileShard uses the **Web Crypto API** for browser-native AES-256-GCM encryption:
+fragment.io uses the **Web Crypto API** for browser-native AES-256-GCM encryption:
 
 | Parameter | Value |
 |-----------|-------|
@@ -406,7 +406,7 @@ npm run build
 | Native Folder Picker | Yes | Yes | No | No |
 | Responsive Layout | Yes | Yes | Yes | Yes |
 
-> **Note:** On browsers without File System Access API support (Safari, Firefox), FileShard automatically falls back to standard browser downloads.
+> **Note:** On browsers without File System Access API support (Safari, Firefox), fragment.io automatically falls back to standard browser downloads.
 
 ---
 
@@ -436,7 +436,7 @@ Distributed under the **Apache License 2.0**. See `SPDX-License-Identifier` head
 
 <div align="center">
 
-**Built with care by [FRAGMENT.IO](https://github.com/yourusername/fileshard)**
+**Built with care by [fragment.io](https://github.com/yourusername/fileshard)**
 
 *Your files. Your browser. Your control.*
 

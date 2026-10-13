@@ -33,6 +33,8 @@ export interface FileManifest {
   }[];
 }
 
+export type PerformanceMode = 'eco' | 'balanced' | 'turbo';
+
 export interface SplitConfig {
   partSizeBytes: number;
   splitMode: 'size' | 'count';
@@ -41,6 +43,8 @@ export interface SplitConfig {
   compressParts: boolean;
   compressionLevel: number;
   verifyChecksums: boolean;
+  bufferSizeBytes?: number;
+  performanceMode?: PerformanceMode;
   destination: 'local' | 'cloud' | 'both';
   cloudProvider: 's3' | 'r2' | 'vercel' | 'gcs' | 'vault';
   password?: string;

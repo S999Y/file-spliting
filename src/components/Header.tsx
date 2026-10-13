@@ -50,9 +50,9 @@ export const Header: React.FC<HeaderProps> = ({
             <Menu className="w-5 h-5" />
           </button>
         )}
-        <span className="text-slate-900 font-bold">FileShard</span>
-        <span className="text-slate-300">/</span>
-        <span className="text-slate-900 font-semibold">{getTabLabel(activeTab)}</span>
+        <span className="text-base md:text-lg font-semibold tracking-tight text-slate-800">
+          {getTabLabel(activeTab)}
+        </span>
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">

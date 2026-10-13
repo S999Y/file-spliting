@@ -50,7 +50,7 @@ export async function uploadShardBackupToCloud(
     r2: 'Cloudflare R2',
     vercel: 'Vercel Blob Storage',
     gcs: 'Google Cloud Storage',
-    vault: 'FRAGMENT.IO Cloud Vault',
+    vault: 'fragment.io Cloud Vault',
   };
 
   const cloudParts = parts.map(p => ({
