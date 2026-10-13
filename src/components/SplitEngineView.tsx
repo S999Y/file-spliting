@@ -19,13 +19,14 @@ import {
   LockOpen,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { SplitConfig, PartInfo } from '../types';
+import { SplitConfig, PartInfo, PerformanceMode } from '../types';
 import { formatBytes, formatDuration, parseSizeString } from '../utils/crypto';
+import { PERFORMANCE_MODES, getBufferBytes } from '../utils/performance';
 import { splitFileInBrowser, createBundleZip, SplitResult } from '../utils/splitter';
 import { uploadShardBackupToCloud, getCloudConfig } from '../utils/cloudStorage';
 import { soundManager } from '../utils/sound';
 import { promptSaveLocation, writeBlobToStream, promptSaveDirectory, writeBlobsToDirectory, fallbackDownloadBlob } from '../utils/saveHelper';
-import { HistoryEntry } from '../utils/dataStorage';
+import { HistoryEntry, loadPerformanceMode, savePerformanceMode } from '../utils/dataStorage';
 
 interface SplitEngineViewProps {
   onLog: (level: 'INFO' | 'SYS' | 'AUTH' | 'CHK' | 'WARN' | 'ERROR' | 'SUCCESS', msg: string) => void;
@@ -53,6 +54,8 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [archiveFormat, setArchiveFormat] = useState<'rar' | 'zip' | '7z'>('rar');
   const [archiveComment, setArchiveComment] = useState<string>('');
+  const [performanceMode, setPerformanceMode] = useState<PerformanceMode>(() => loadPerformanceMode());
+  const [skipChecksum, setSkipChecksum] = useState<boolean>(false);
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
@@ -136,7 +139,9 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
       namingFormat,
       compressParts,
       compressionLevel: 6,
-      verifyChecksums: true,
+      verifyChecksums: !skipChecksum,
+      bufferSizeBytes: getBufferBytes(performanceMode),
+      performanceMode,
       destination,
       cloudProvider: 'vault',
       password: password || undefined,
@@ -250,6 +255,11 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
 
   const handleDownloadChecksums = async () => {
     if (!result) return;
+    if (result.parts.every(p => !p.checksum)) {
+      onLog('WARN', 'No checksums available — this file was split in turbo fast-slice mode (SHA-256 skipped).');
+      alert('Checksums were skipped for this split (turbo fast-slice mode). Re-run with checksum verification enabled to export hashes.');
+      return;
+    }
     const lines = result.parts.map(p => `${p.name}:${p.checksum}`);
 
     let content: string;
@@ -636,6 +646,56 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
             />
           </div>
 
+          <div className="p-2.5 md:p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2.5">
+            <div className="flex items-center gap-2">
+              <Zap className="w-3.5 h-3.5 md:w-4 md:h-4 text-amber-500" />
+              <span className="text-[11px] md:text-xs font-bold text-slate-800">Performance / Memory</span>
+            </div>
+            <p className="text-[10px] md:text-[11px] text-slate-500">
+              Read buffer size. Balanced is recommended — larger buffers use more memory with little speed gain, since hashing is CPU-bound.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {PERFORMANCE_MODES.map(mode => (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={() => {
+                    setPerformanceMode(mode.id);
+                    savePerformanceMode(mode.id);
+                  }}
+                  className={`p-2 rounded-lg border text-center transition ${
+                    performanceMode === mode.id
+                      ? 'border-blue-500 bg-blue-50/50 text-blue-900'
+                      : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
+                  }`}
+                >
+                  <p className="text-[11px] md:text-xs font-bold">{mode.label}</p>
+                  <p className="text-[9px] md:text-[10px] text-slate-400 font-mono">{mode.desc}</p>
+                </button>
+              ))}
+            </div>
+            <label className="flex items-start justify-between gap-2 cursor-pointer pt-0.5">
+              <span className="flex-1">
+                <span className="text-[11px] md:text-xs font-bold text-slate-800 block">Turbo fast-slice (skip SHA-256)</span>
+                <span className="text-[10px] md:text-[11px] text-slate-500 block mt-0.5">
+                  Skips checksum hashing for near-instant splitting. Disables integrity verification.
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={skipChecksum}
+                onChange={e => setSkipChecksum(e.target.checked)}
+                className="mt-1 w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 shrink-0"
+              />
+            </label>
+            {skipChecksum && (
+              <div className="flex items-center gap-1.5 text-[9px] md:text-[10px] text-amber-700 font-bold">
+                <ShieldCheck className="w-3 h-3" />
+                <span>Checksums disabled — volumes cannot be verified during reassembly</span>
+              </div>
+            )}
+          </div>
+
           <button
             onClick={handleStartSplit}
             disabled={!file || isProcessing}
@@ -682,7 +742,7 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
           <div className="grid grid-cols-3 gap-2 text-[10px] md:text-xs font-mono text-slate-400 pt-1 border-t border-slate-800">
             <div><span className="hidden sm:inline">Throughput: </span><span className="text-white font-bold">{speedMBs} MB/s</span></div>
             <div className="text-center"><span className="hidden sm:inline">ETA: </span><span className="text-white font-bold">{formatDuration(etaSeconds)}</span></div>
-            <div className="text-right"><span className="hidden sm:inline">RAM: </span><span className="text-emerald-400 font-bold">Streaming</span></div>
+            <div className="text-right"><span className="hidden sm:inline">Buffer: </span><span className="text-emerald-400 font-bold">{Math.round(getBufferBytes(performanceMode) / (1024 * 1024))} MB</span></div>
           </div>
         </div>
       )}
@@ -702,7 +762,11 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
                     Split Complete: {result.parts.length} Volumes
                   </h3>
                   <p className="text-[10px] md:text-xs text-slate-500 font-mono">
-                    SHA-256: <span className="text-slate-800 font-bold">{result.manifest.originalChecksum.substring(0, 24)}...</span>
+                    {result.manifest.originalChecksum ? (
+                      <>SHA-256: <span className="text-slate-800 font-bold">{result.manifest.originalChecksum.substring(0, 24)}...</span></>
+                    ) : (
+                      <span className="text-amber-600 font-bold">Turbo fast-slice — checksums skipped</span>
+                    )}
                   </p>
                 </div>
               </div>
@@ -806,17 +870,21 @@ export const SplitEngineView: React.FC<SplitEngineViewProps> = ({
                     <td className="py-2 md:py-3 font-bold text-slate-800 max-w-[150px] md:max-w-none truncate">{part.name}</td>
                     <td className="py-2 md:py-3 text-slate-600">{formatBytes(part.size)}</td>
                     <td className="py-2 md:py-3 hidden sm:table-cell">
-                      <button
-                        onClick={() => handleCopyChecksum(part.checksum)}
-                        className="flex items-center gap-1 text-slate-500 hover:text-blue-600 font-mono text-[10px] md:text-[11px] group"
-                      >
-                        <span>{part.checksum.substring(0, 16)}...</span>
-                        {copiedHash === part.checksum ? (
-                          <Check className="w-3 h-3 text-emerald-600" />
-                        ) : (
-                          <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" />
-                        )}
-                      </button>
+                      {part.checksum ? (
+                        <button
+                          onClick={() => handleCopyChecksum(part.checksum)}
+                          className="flex items-center gap-1 text-slate-500 hover:text-blue-600 font-mono text-[10px] md:text-[11px] group"
+                        >
+                          <span>{part.checksum.substring(0, 16)}...</span>
+                          {copiedHash === part.checksum ? (
+                            <Check className="w-3 h-3 text-emerald-600" />
+                          ) : (
+                            <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" />
+                          )}
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-mono text-slate-400 italic">skipped</span>
+                      )}
                     </td>
                     <td className="py-2 md:py-3">
                       <span className="bg-emerald-100 text-emerald-800 px-1.5 md:px-2 py-0.5 rounded text-[9px] md:text-[10px] font-bold">
