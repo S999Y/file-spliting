@@ -37,7 +37,7 @@ export function generateExtractionScripts(fileName: string, partNames: string[])
   
   const bat = `@echo off
 echo ========================================================
-echo  FileShard / WinRAR Native Reassembly Script
+echo  fragment.io / WinRAR Native Reassembly Script
 echo  Reconstructing: ${fileName}
 echo ========================================================
 echo.
@@ -54,9 +54,9 @@ pause
 `;
 
   const sh = `#!/bin/bash
-# FileShard Native Reassembly Script
+# fragment.io Native Reassembly Script
 echo "========================================================"
-echo " FileShard Native Reassembly (Unix/Linux/macOS)"
+echo " fragment.io Native Reassembly (Unix/Linux/macOS)"
 echo " Reconstructing: ${fileName}"
 echo "========================================================"
 echo ""
@@ -80,7 +80,12 @@ export async function splitFileInBrowser(
   onLog?: (level: 'INFO' | 'SYS' | 'AUTH' | 'CHK' | 'WARN' | 'ERROR' | 'SUCCESS', msg: string) => void
 ): Promise<SplitResult> {
   const startTime = Date.now();
+  const bufferSizeBytes = config.bufferSizeBytes && config.bufferSizeBytes > 0
+    ? config.bufferSizeBytes
+    : 8 * 1024 * 1024;
+  const verify = config.verifyChecksums !== false;
   onLog?.('SYS', `Starting fragmentation for: "${file.name}" (${(file.size / (1024 * 1024)).toFixed(2)} MB)`);
+  onLog?.('INFO', `Performance: ${(bufferSizeBytes / (1024 * 1024)).toFixed(0)} MB stream buffer · Checksum verification ${verify ? 'ON' : 'OFF (turbo)'}`);
 
   let partSize = config.partSizeBytes;
   if (config.splitMode === 'count' && config.targetPartCount > 0) {
@@ -94,9 +99,14 @@ export async function splitFileInBrowser(
   onLog?.('INFO', `Calculated ${totalParts} volume(s) with size: ${(partSize / (1024 * 1024)).toFixed(2)} MB [Format: ${config.namingFormat.toUpperCase()}]`);
 
   // Master Checksum
-  onLog?.('CHK', `Computing master SHA-256 hash for entire file via memory-safe stream...`);
-  const masterChecksum = await calculateSHA256(file);
-  onLog?.('CHK', `Master SHA-256: ${masterChecksum.substring(0, 16)}...${masterChecksum.substring(masterChecksum.length - 8)}`);
+  let masterChecksum = '';
+  if (verify) {
+    onLog?.('CHK', `Computing master SHA-256 hash for entire file via memory-safe stream...`);
+    masterChecksum = await calculateSHA256(file, undefined, bufferSizeBytes);
+    onLog?.('CHK', `Master SHA-256: ${masterChecksum.substring(0, 16)}...${masterChecksum.substring(masterChecksum.length - 8)}`);
+  } else {
+    onLog?.('WARN', `Checksum verification disabled — skipping master SHA-256 for maximum speed.`);
+  }
 
   const fileId = generateUUID();
   const parts: PartInfo[] = [];
@@ -139,8 +149,13 @@ export async function splitFileInBrowser(
       }
     }
 
-    const partChecksum = await calculateSHA256(processedBlob);
-    onLog?.('CHK', `Volume ${i + 1} Checksum: [${partChecksum.substring(0, 12)}...] - Verified`);
+    let partChecksum = '';
+    if (verify) {
+      partChecksum = await calculateSHA256(processedBlob, undefined, bufferSizeBytes);
+      onLog?.('CHK', `Volume ${i + 1} Checksum: [${partChecksum.substring(0, 12)}...] - Verified`);
+    } else {
+      onLog?.('SYS', `Volume ${i + 1} sliced (checksum skipped).`);
+    }
 
     const partInfo: PartInfo = {
       index: i + 1,
@@ -241,7 +256,7 @@ export async function createBundleZip(
       `This archive is password-protected.\n` +
       `Encryption: AES-256-GCM\n` +
       `Algorithm: PBKDF2-SHA256 (100,000 iterations)\n` +
-      `Use FileShard to decrypt and reassemble.\n`
+      `Use fragment.io to decrypt and reassemble.\n`
     );
   }
 

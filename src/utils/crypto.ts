@@ -1,7 +1,31 @@
 /**
- * Cryptographic and formatting utilities for FileShard
+ * Cryptographic and formatting utilities for fragment.io
  * Includes memory-safe chunked streaming SHA-256 for multi-gigabyte files.
  */
+
+// Yields control back to the browser so it can paint / handle input between
+// chunks of synchronous hashing work. Keeps the UI responsive regardless of
+// how large the configured I/O buffer is.
+const yieldChannel =
+  typeof MessageChannel !== 'undefined' ? new MessageChannel() : null;
+
+function yieldToMainThread(): Promise<void> {
+  const scheduler = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
+  if (scheduler && typeof scheduler.yield === 'function') {
+    return scheduler.yield();
+  }
+  if (yieldChannel) {
+    return new Promise<void>(resolve => {
+      yieldChannel.port1.onmessage = () => resolve();
+      yieldChannel.port2.postMessage(null);
+    });
+  }
+  return new Promise<void>(resolve => setTimeout(resolve, 0));
+}
+
+// Max amount of data hashed in a single synchronous burst. Bigger read buffers
+// are split into several of these so the main thread never blocks for long.
+const HASH_WORK_SLICE = 8 * 1024 * 1024;
 
 // Pure-JS streaming SHA-256 for large files without loading entire files into RAM
 class StreamingSHA256 {
@@ -148,9 +172,18 @@ class StreamingSHA256 {
   }
 }
 
+async function hashBytesCooperatively(bytes: Uint8Array, hasher: StreamingSHA256): Promise<void> {
+  for (let p = 0; p < bytes.length; p += HASH_WORK_SLICE) {
+    const stop = Math.min(p + HASH_WORK_SLICE, bytes.length);
+    hasher.update(bytes.subarray(p, stop));
+    if (stop < bytes.length) await yieldToMainThread();
+  }
+}
+
 export async function calculateSHA256(
   blob: Blob | ArrayBuffer,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  chunkSize: number = 8 * 1024 * 1024
 ): Promise<string> {
   // If small ArrayBuffer or small Blob (<= 32MB), native crypto.subtle is extremely fast
   if (blob instanceof ArrayBuffer) {
@@ -160,7 +193,7 @@ export async function calculateSHA256(
       return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     }
     const hasher = new StreamingSHA256();
-    hasher.update(new Uint8Array(blob));
+    await hashBytesCooperatively(new Uint8Array(blob), hasher);
     if (onProgress) onProgress(100);
     return hasher.digest();
   }
@@ -179,7 +212,6 @@ export async function calculateSHA256(
   }
 
   // Memory-safe chunked streaming reader (handles 2GB, 5GB, 10GB+ without crashing RAM)
-  const chunkSize = 8 * 1024 * 1024; // 8 MB slice buffer
   const totalBytes = blob.size;
   const hasher = new StreamingSHA256();
   let offset = 0;
@@ -188,7 +220,7 @@ export async function calculateSHA256(
     const end = Math.min(offset + chunkSize, totalBytes);
     const slice = blob.slice(offset, end);
     const chunkBuffer = await slice.arrayBuffer();
-    hasher.update(new Uint8Array(chunkBuffer));
+    await hashBytesCooperatively(new Uint8Array(chunkBuffer), hasher);
     offset = end;
     if (onProgress) {
       onProgress(Math.min(100, Math.round((offset / totalBytes) * 100)));

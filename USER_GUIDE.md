@@ -1,12 +1,12 @@
-# FileShard — Complete User Guide
+# fragment.io — Complete User Guide
 
-Everything you need to know to use FileShard for splitting, reassembling, compressing, encrypting, and verifying any file.
+Everything you need to know to use fragment.io for splitting, reassembling, compressing, encrypting, and verifying any file.
 
 ---
 
 ## Table of Contents
 
-- [Can FileShard Handle Any File?](#can-fileshard-handle-any-file)
+- [Can fragment.io Handle Any File?](#can-fragmentio-handle-any-file)
 - [Responsive Design](#responsive-design)
 - [Splitting Files](#splitting-files)
 - [Reassembling Files](#reassembling-files)
@@ -25,9 +25,9 @@ Everything you need to know to use FileShard for splitting, reassembling, compre
 
 ---
 
-## Can FileShard Handle Any File?
+## Can fragment.io Handle Any File?
 
-**Yes.** FileShard can split, reassemble, compress, and encrypt **any file type** of **any size**:
+**Yes.** fragment.io can split, reassemble, compress, and encrypt **any file type** of **any size**:
 
 - Videos: `.mp4`, `.mkv`, `.avi`, `.mov`
 - Archives: `.zip`, `.rar`, `.7z`, `.tar.gz`
@@ -37,7 +37,7 @@ Everything you need to know to use FileShard for splitting, reassembling, compre
 - Databases: `.sql`, `.sqlite`
 - Any other file format
 
-**Size limits:** None. FileShard uses memory-safe streaming (8 MB chunks) so it handles multi-GB files without running out of browser RAM. Files over 2 GB are automatically detected and processed with zero-RAM chunk slicing.
+**Size limits:** None. fragment.io uses memory-safe streaming (8 MB chunks) so it handles multi-GB files without running out of browser RAM. Files over 2 GB are automatically detected and processed with zero-RAM chunk slicing.
 
 **What you get after splitting:**
 - Smaller volume parts (e.g., 4 x 500 MB parts from a 2 GB file)
@@ -49,7 +49,7 @@ Everything you need to know to use FileShard for splitting, reassembling, compre
 
 ## Responsive Design
 
-FileShard is fully responsive and works on any screen size:
+fragment.io is fully responsive and works on any screen size:
 
 ### Mobile (< 768px)
 - **Collapsible sidebar** — tap the hamburger menu icon (three lines) in the header to open/close the navigation
@@ -76,7 +76,7 @@ FileShard is fully responsive and works on any screen size:
 
 1. Go to **Split Engine** in the sidebar (or tap the hamburger menu on mobile)
 2. **Click** the upload zone or **drag & drop** your file
-3. FileShard shows the file name, size, and detects if it's a large file (2 GB+)
+3. fragment.io shows the file name, size, and detects if it's a large file (2 GB+)
 
 ### Step 2 — Configure Split Settings
 
@@ -144,7 +144,7 @@ The original file extension (`.mp4`) is always preserved in the part names.
 
 1. Go to **Reassembly** in the sidebar
 2. Click the upload zone and select **all** your `.part*` or `.001` files
-3. FileShard detects the number of files and total size
+3. fragment.io detects the number of files and total size
 
 ### Step 2 — Load Manifest (Recommended)
 
@@ -154,7 +154,7 @@ The `.fshard.json` manifest file enables automatic checksum verification:
 2. Select the manifest file that came with your split parts
 3. The manifest shows: original name, size, part count, encryption status
 
-**Without a manifest:** FileShard can still reassemble by inferring the original filename from part names, but you lose automatic checksum verification.
+**Without a manifest:** fragment.io can still reassemble by inferring the original filename from part names, but you lose automatic checksum verification.
 
 ### Step 3 — Enter Password (If Encrypted)
 
@@ -173,7 +173,7 @@ If the archive was split with a password:
 ### Step 5 — Reassemble & Verify
 
 1. Click **"Reassemble & Verify"**
-2. FileShard processes each part:
+2. fragment.io processes each part:
    - Validates SHA-256 checksum against manifest (if available)
    - Decrypts AES-256-GCM (if password-protected)
    - Decompresses GZIP (if compressed)
@@ -189,7 +189,7 @@ Click **"Download File"** to save the reassembled file with its original name an
 
 ## Checksums & Verification
 
-FileShard uses **SHA-256** (256-bit cryptographic hash) at every stage:
+fragment.io uses **SHA-256** (256-bit cryptographic hash) at every stage:
 
 ### During Split
 
@@ -210,11 +210,11 @@ FileShard uses **SHA-256** (256-bit cryptographic hash) at every stage:
 
 ### How to Verify Manually
 
-You can verify files outside FileShard using the standalone **Checksum Verifier**:
+You can verify files outside fragment.io using the standalone **Checksum Verifier**:
 
 1. Go to **Checksum Verifier** in the sidebar
 2. Drop any file into the upload zone
-3. FileShard computes its SHA-256 instantly
+3. fragment.io computes its SHA-256 instantly
 4. Paste the expected hash into the "Expected Hash" field
 5. Green = match, Red = mismatch
 
@@ -252,7 +252,7 @@ Compare the output hash with the one in your `.fshard.json` manifest under `orig
 
 ## Password Protection (Encryption)
 
-FileShard uses **AES-256-GCM** — the same encryption standard used by banks and governments.
+fragment.io uses **AES-256-GCM** — the same encryption standard used by banks and governments.
 
 ### How It Works
 
@@ -366,7 +366,7 @@ Register shard backups against configurable cloud providers.
 - Cloudflare R2
 - Vercel Blob Storage
 - Google Cloud Storage
-- FRAGMENT.IO Cloud Vault (built-in)
+- fragment.io Cloud Vault (built-in)
 
 ### How It Works
 
@@ -399,21 +399,21 @@ Verify file integrity against SHA-256 hashes. Two modes available.
 ### Batch Verify Mode
 
 1. Click the **"Batch"** toggle in the mode selector
-2. **Step 1:** Upload a checksums file (`.txt`, `.csv`, or `.json`) exported from FileShard's split engine
+2. **Step 1:** Upload a checksums file (`.txt`, `.csv`, or `.json`) exported from fragment.io's split engine
    - The file is parsed and all expected hashes are loaded
    - A preview shows the loaded entries
 3. **Step 2:** Upload all the part files you want to verify
    - Each file is checked against the checksums file
    - Green dot = found in checksums file, amber dot = no expected hash
 4. Click **"Verify All"** to start
-   - FileShard computes SHA-256 for every file and compares against expected hashes
+   - fragment.io computes SHA-256 for every file and compares against expected hashes
    - Results table shows: status icon, file name, size, calculated hash, expected hash
    - Matched/Mismatched counter at top
 5. Click **"Verify Again"** to retry
 
 ### Checksums File Formats
 
-FileShard can parse any of these formats:
+fragment.io can parse any of these formats:
 
 **Plain text (.txt):**
 ```
@@ -476,7 +476,7 @@ A feed of the last 10 operations with:
 
 ## Device-Scoped Storage
 
-FileShard isolates data per browser and device:
+fragment.io isolates data per browser and device:
 
 ### How It Works
 
@@ -530,7 +530,7 @@ Every operation is logged with a timestamp and level:
 
 ## Save Location Behavior
 
-FileShard uses smart save dialogs to minimize interruptions:
+fragment.io uses smart save dialogs to minimize interruptions:
 
 | Operation | Save Behavior |
 |-----------|--------------|
@@ -566,7 +566,7 @@ FileShard uses smart save dialogs to minimize interruptions:
 
 ### "Decryption failed" error during reassembly
 
-- The password is wrong or the files were not encrypted with FileShard
+- The password is wrong or the files were not encrypted with fragment.io
 - There is no password recovery — double-check your password
 
 ### Checksum mismatch after reassembly
@@ -589,7 +589,7 @@ FileShard uses smart save dialogs to minimize interruptions:
 
 ### Parts are out of order during reassembly
 
-- FileShard auto-detects part ordering from filenames
+- fragment.io auto-detects part ordering from filenames
 - Ensure all parts have consistent naming (e.g., all `.part1.rar`, `.part2.rar`)
 - Don't mix naming formats (e.g., `.part1.rar` and `.001`)
 
@@ -602,7 +602,7 @@ FileShard uses smart save dialogs to minimize interruptions:
 ### Safari / Firefox can't save to a specific folder
 
 - File System Access API is only supported in Chromium browsers (Chrome, Edge, Opera)
-- FileShard automatically falls back to browser downloads on unsupported browsers
+- fragment.io automatically falls back to browser downloads on unsupported browsers
 - All functionality works — only the save dialog style differs
 
 ### Sidebar won't open on mobile
@@ -613,6 +613,6 @@ FileShard uses smart save dialogs to minimize interruptions:
 
 ### Different browsers show different data
 
-- This is by design — FileShard scopes all data per browser/device
+- This is by design — fragment.io scopes all data per browser/device
 - Each browser gets its own unique device ID on first visit
 - Use "Export Data" to back up data from one browser, then import on another

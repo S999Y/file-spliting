@@ -4,7 +4,8 @@
  * deployment see their own separate activity.
  */
 
-import { SystemStats, AuditLog } from '../types';
+import { SystemStats, AuditLog, PerformanceMode } from '../types';
+import { DEFAULT_PERFORMANCE_MODE } from './performance';
 
 // --- Device ID (per-browser/per-device identity) ---
 
@@ -60,6 +61,7 @@ const KEYS = {
   history: 'history',
   cloudBackups: 'cloud_backups',
   cloudConfig: 'cloud_config',
+  perfMode: 'perf_mode',
 } as const;
 
 // --- Stats ---
@@ -177,6 +179,22 @@ export function loadCloudConfig<T extends object>(): T | null {
 export function saveCloudConfig<T>(data: T): void {
   try {
     localStorage.setItem(pk(KEYS.cloudConfig), JSON.stringify(data));
+  } catch { /* ignore */ }
+}
+
+// --- Performance Mode (device-scoped) ---
+
+export function loadPerformanceMode(): PerformanceMode {
+  try {
+    const raw = localStorage.getItem(pk(KEYS.perfMode));
+    if (raw === 'eco' || raw === 'balanced' || raw === 'turbo') return raw;
+  } catch { /* ignore */ }
+  return DEFAULT_PERFORMANCE_MODE;
+}
+
+export function savePerformanceMode(mode: PerformanceMode): void {
+  try {
+    localStorage.setItem(pk(KEYS.perfMode), mode);
   } catch { /* ignore */ }
 }
 
