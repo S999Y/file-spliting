@@ -1,5 +1,5 @@
 {
-  "name": "fileshard",
+  "name": "fragment.io",
   "private": true,
   "version": "3.0.0",
   "description": "WinRAR-compatible file splitting, compression, encryption, and reassembly toolkit \u2014 entirely client-side.",

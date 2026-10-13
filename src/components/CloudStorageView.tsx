@@ -123,7 +123,7 @@ export const CloudStorageView: React.FC<CloudStorageViewProps> = ({
               onChange={e => setConfig({ ...config, provider: e.target.value as CloudConfig['provider'] })}
               className="w-full rounded-lg border border-slate-300 p-2 font-medium bg-white text-slate-800"
             >
-              <option value="vault">FRAGMENT.IO Cloud Vault</option>
+              <option value="vault">fragment.io Cloud Vault</option>
               <option value="s3">Amazon S3</option>
               <option value="r2">Cloudflare R2</option>
               <option value="vercel">Vercel Blob</option>

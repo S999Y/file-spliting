@@ -91,25 +91,23 @@ export async function reassembleFileFromParts(
     onLog?.('CHK', `Validating volume [${i + 1}/${totalParts}] (Part #${detectedIdx || (i + 1)}): "${part.name}" (${(part.blob.size / (1024 * 1024)).toFixed(2)} MB)`);
 
     // Verify individual checksum (before decryption, checksum is of encrypted data)
-    const partHash = await calculateSHA256(part.blob);
-    part.calculatedChecksum = partHash;
+    const expectedPart = manifest?.parts.find(p => p.index === (i + 1) || p.name === part.name);
 
-    if (manifest) {
-      const expectedPart = manifest.parts.find(p => p.index === (i + 1) || p.name === part.name);
-      if (expectedPart) {
-        part.expectedChecksum = expectedPart.checksum;
-        if (expectedPart.checksum.toLowerCase() === partHash.toLowerCase()) {
-          part.isValid = true;
-          verifiedCount++;
-          onLog?.('SUCCESS', `Volume ${i + 1} SHA-256 MATCH: [${partHash.substring(0, 10)}...] ✓`);
-        } else {
-          part.isValid = false;
-          onLog?.('ERROR', `Volume ${i + 1} HASH MISMATCH! Expected ${expectedPart.checksum.substring(0, 10)}..., Got ${partHash.substring(0, 10)}... ✗`);
-          throw new Error(`Data integrity violation in ${part.name}: Checksum verification failed.`);
-        }
+    if (expectedPart && expectedPart.checksum) {
+      const partHash = await calculateSHA256(part.blob);
+      part.calculatedChecksum = partHash;
+      part.expectedChecksum = expectedPart.checksum;
+      if (expectedPart.checksum.toLowerCase() === partHash.toLowerCase()) {
+        part.isValid = true;
+        verifiedCount++;
+        onLog?.('SUCCESS', `Volume ${i + 1} SHA-256 MATCH: [${partHash.substring(0, 10)}...] ✓`);
       } else {
-        onLog?.('WARN', `Volume ${part.name} not explicitly listed in manifest index, continuing...`);
+        part.isValid = false;
+        onLog?.('ERROR', `Volume ${i + 1} HASH MISMATCH! Expected ${expectedPart.checksum.substring(0, 10)}..., Got ${partHash.substring(0, 10)}... ✗`);
+        throw new Error(`Data integrity violation in ${part.name}: Checksum verification failed.`);
       }
+    } else if (manifest) {
+      onLog?.('WARN', `Volume ${part.name} has no stored checksum (turbo split) — skipping verification, continuing...`);
     }
 
     let rawChunkBlob = part.blob;
@@ -152,8 +150,11 @@ export async function reassembleFileFromParts(
     type: manifest?.originalType || 'application/octet-stream',
   });
 
-  onLog?.('CHK', `Computing master checksum on reassembled binary (${(finalBlob.size / (1024 * 1024)).toFixed(2)} MB)...`);
-  const masterChecksum = await calculateSHA256(finalBlob);
+  let masterChecksum = '';
+  if (manifest?.originalChecksum) {
+    onLog?.('CHK', `Computing master checksum on reassembled binary (${(finalBlob.size / (1024 * 1024)).toFixed(2)} MB)...`);
+    masterChecksum = await calculateSHA256(finalBlob);
+  }
   onProgress?.(100, totalParts, totalParts);
 
   let checksumMatched = true;
@@ -165,7 +166,7 @@ export async function reassembleFileFromParts(
       onLog?.('ERROR', `Master checksum mismatch: Calculated ${masterChecksum}, Expected ${manifest.originalChecksum}`);
     }
   } else {
-    onLog?.('INFO', `Reassembled Master SHA-256: ${masterChecksum}`);
+    onLog?.('INFO', `No stored master checksum (turbo split) — skipping master verification.`);
   }
 
   const fileName = inferOriginalFileName(sortedParts.map(p => p.name), manifest?.originalName);
